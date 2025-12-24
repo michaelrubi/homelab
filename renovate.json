@@ -1,10 +1,10 @@
 {
     "extends": [
-        "config:base"
+        "config:recommended"
     ],
     "kubernetes": {
-        "fileMatch": [
-            "\\.yaml$"
+        "managerFilePatterns": [
+            "/\\.yaml$/"
         ]
     },
     "packageRules": [
