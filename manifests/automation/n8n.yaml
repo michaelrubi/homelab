@@ -1,0 +1,106 @@
+# 1. PVC for Config & Keys (Critical for Encryption)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+# 2. The n8n Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      # Permissions fix for Longhorn volumes
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+      - name: n8n
+        image: docker.n8n.io/n8nio/n8n:latest
+        ports:
+        - containerPort: 5678
+        # --- STORAGE CONFIG ---
+        volumeMounts:
+        - name: n8n-data
+          mountPath: /home/node/.n8n
+        # --- ENV VARIABLES ---
+        env:
+        - name: GENERIC_TIMEZONE
+          value: "America/Phoenix"
+        - name: TZ
+          value: "America/Phoenix"
+        - name: N8N_SECURE_COOKIE
+          value: "false"
+        # ENCRYPTION KEY
+        - name: N8N_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: N8N_ENCRYPTION_KEY
+        # --- URL CONFIG ---
+        - name: WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: N8N_URL
+        - name: N8N_EDITOR_BASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: n8n-secrets
+              key: N8N_URL
+        # --- DATABASE CONFIG ---
+        - name: DB_TYPE
+          value: "postgresdb"
+        - name: DB_POSTGRESDB_HOST
+          value: "postgres"
+        - name: DB_POSTGRESDB_PORT
+          value: "5432"
+        - name: DB_POSTGRESDB_USER
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_USER
+        - name: DB_POSTGRESDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_PASSWORD
+        - name: DB_POSTGRESDB_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_DB
+      volumes:
+      - name: n8n-data
+        persistentVolumeClaim:
+          claimName: n8n-pvc
+---
+# 3. The Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: n8n
+  ports:
+    - port: 5678
+      targetPort: 5678
