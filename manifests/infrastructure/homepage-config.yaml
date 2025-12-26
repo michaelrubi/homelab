@@ -32,6 +32,11 @@ data:
             icon: longhorn.png
             href: "http://wtc2.robin-mine.ts.net:9999" 
             description: "Storage Manager"
+        - VaultWarden:
+            icon: vaultwarden.png
+            href: "{{HOMEPAGE_VAR_VAULTWARDEN_URL}}"
+            description: "Password Manager"
+            # ping: "http://vaultwarden-service"
 
   # (Standard boilerplate to keep it from crashing)
   widgets.yaml: |
