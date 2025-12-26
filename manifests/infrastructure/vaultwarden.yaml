@@ -1,0 +1,73 @@
+# 1. Persistent Storage for Vaultwarden Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vaultwarden-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi
+---
+# 2. Vaultwarden Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultwarden
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vaultwarden
+  template:
+    metadata:
+      labels:
+        app: vaultwarden
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: vaultwarden
+        image: vaultwarden/server:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: vaultwarden-secrets
+              key: VW_DOMAIN
+        - name: SIGNUPS_ALLOWED
+          value: "false"
+        volumeMounts:
+        - name: vaultwarden-data
+          mountPath: /data
+      volumes:
+      - name: vaultwarden-data
+        persistentVolumeClaim:
+          claimName: vaultwarden-pvc
+---
+# 3. The Service (Exposed to Tailscale)
+apiVersion: v1
+kind: Service
+metadata:
+  name: vaultwarden-service
+  namespace: default
+  # annotations:
+    # tailscale.com/expose: "true"
+    # tailscale.com/hostname: "vault"
+spec:
+  type: LoadBalancer
+  # loadBalancerClass: tailscale
+  selector:
+    app: vaultwarden
+  ports:
+    - port: 8080
+      targetPort: 80
+      protocol: TCP
