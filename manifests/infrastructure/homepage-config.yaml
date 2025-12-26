@@ -22,12 +22,10 @@ data:
             # ping: "http://n8n-service:5678/healthz"
 
     - Infrastructure:
-        - CloudBeaver:
-            icon: dbeaver.png
-            href: "http://wtc2.robin-mine.ts.net:8978"
-            description: "Database Manager"
-            # ping: "http://cloudbeaver-service:8978"
-            
+        - pgweb:
+            icon: postgresql.png
+            href: "http://wtc2.robin-mine.ts.net:8081"
+            description: "Postgres Explorer"
         - Longhorn:
             icon: longhorn.png
             href: "http://wtc2.robin-mine.ts.net:9999" 

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgweb
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgweb
+  template:
+    metadata:
+      labels:
+        app: pgweb
+    spec:
+      containers:
+      - name: pgweb
+        image: sosedoff/pgweb:latest
+        ports:
+        - containerPort: 8081
+        env:
+        - name: PG_HOST
+          value: "postgres" # Connects to the service in n8n-pg.yaml
+        - name: PG_PORT
+          value: "5432"
+        - name: PG_USER
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_USER
+        - name: PG_PASS
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_PASSWORD
+        - name: PG_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_DB
+        - name: PGWEB_DATABASE_URL
+          value: "postgres://$(PG_USER):$(PG_PASS)@$(PG_HOST):$(PG_PORT)/$(PG_DATABASE)?sslmode=disable"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgweb-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: pgweb
+  ports:
+    - port: 8081
+      targetPort: 8081
