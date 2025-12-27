@@ -12,7 +12,7 @@ data:
         style: row
         columns: 2
 
-  # Using Magic DNS for links (TailScale)
+  # Homepage Links
   services.yaml: |
     - Automation:
         - n8n:
@@ -35,7 +35,12 @@ data:
             href: "{{HOMEPAGE_VAR_VAULTWARDEN_URL}}"
             description: "Password Manager"
             # ping: "http://vaultwarden-service"
-
+    - Productivity:
+        - SiYuan:
+            icon: siyuan.png
+            href: "{{HOMEPAGE_VAR_SIYUAN_URL}}"
+            description: "Note Taking App"
+            # ping: "http://siyuan-service:6806"
   # (Standard boilerplate to keep it from crashing)
   widgets.yaml: |
     - resources:
