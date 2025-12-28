@@ -42,7 +42,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: vaultwarden-secrets
-              key: VW_DOMAIN
+              key: VW_URL
         - name: SIGNUPS_ALLOWED
           value: "false"
         volumeMounts:
