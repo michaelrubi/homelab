@@ -46,6 +46,11 @@ This repo follows a standard Flux v2 GitOps structure:
 ## 🚀 Future Roadmap
 - [x] Implement **GitOps (Flux + SOPS)** to allow safe committing of encrypted secrets to Git.
 - [x] Configure **Renovate** for automated Docker image updates.
-- [ ] Add historical metrics monitoring (Prometheus/Grafana).
+- [x] Add historical metrics monitoring (Prometheus/Grafana).
+- [ ] **Cluster Hardening**: Add Liveness/Readiness probes and Resource Limits to all deployments.
+- [ ] **Disaster Recovery**: Configure Longhorn S3 backups.
+- [ ] **Database Consolidation**: Migrate VaultWarden from SQLite to Postgres.
+- [ ] **Observability**: Set up Flux Notifications (Discord/Slack).
+- [ ] **New Apps**: Deploy **ntfy** for push notifications.
 ---
 Built & Maintained by Michael Rubi
