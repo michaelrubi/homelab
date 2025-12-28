@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: prometheus-community
+  namespace: monitoring
+spec:
+  interval: 2h
+  url: https://prometheus-community.github.io/helm-charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "66.x"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  values:
+    # 1. Grafana Configuration
+    grafana:
+      service:
+        type: LoadBalancer
+        port: 80
+      
+      # Persist Dashboards & Users using Longhorn
+      persistence:
+        enabled: true
+        storageClassName: longhorn
+        size: 2Gi
+
+    # 2. Prometheus Configuration
+    prometheus:
+      prometheusSpec:
+        # Persist Metrics Data using Longhorn
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 10Gi
+        
+        # Resource limits to prevent OOM kills
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 2Gi
+            cpu: 1000m
