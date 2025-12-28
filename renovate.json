@@ -3,6 +3,12 @@
         "config:base"
     ],
     "ignoreUnstable": true,
+    "assignees": [
+        "michaelrubi"
+    ],
+    "reviewers": [
+        "michaelrubi"
+    ],
     "kubernetes": {
         "fileMatch": [
             "\\.yaml$"
