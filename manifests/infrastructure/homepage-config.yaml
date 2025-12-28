@@ -42,7 +42,17 @@ data:
             href: "{{HOMEPAGE_VAR_SIYUAN_URL}}"
             description: "Note Taking App"
             # ping: "http://siyuan-service:8083"
-  # (Standard boilerplate to keep it from crashing)
+    - Monitoring:
+        - Grafana:
+            icon: grafana.png
+            href: "http://wtc2.robin-mine.ts.net:8084"
+            description: "Metrics Dashboard"
+            # ping: "http://grafana-service:8084/api/health"
+        - Prometheus:
+            icon: prometheus.png
+            href: "http://wtc2.robin-mine.ts.net:9090"
+            description: "Metrics Collection"
+            # ping: "http://prometheus-service:9090/-/ready"
   widgets.yaml: |
     - resources:
         cpu: true
