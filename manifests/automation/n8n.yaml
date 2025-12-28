@@ -42,6 +42,25 @@ spec:
         image: docker.n8n.io/n8nio/n8n:2.2.1
         ports:
         - containerPort: 5678
+        # --- HARDENING ---
+        esources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 5
         # --- STORAGE CONFIG ---
         volumeMounts:
         - name: n8n-data

@@ -16,6 +16,14 @@ spec:
       containers:
       - name: cloudflared
         image: cloudflare/cloudflared:latest
+        # --- HARDENING ---
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
         env:
         - name: TUNNEL_TOKEN
           valueFrom:

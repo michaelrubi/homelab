@@ -18,6 +18,20 @@ spec:
         image: sosedoff/pgweb:latest
         ports:
         - containerPort: 8081
+        # --- HARDENING ---
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 20
         env:
         - name: PG_HOST
           value: "postgres" # Connects to the service in n8n-pg.yaml
