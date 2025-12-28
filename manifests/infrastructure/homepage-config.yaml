@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: homepage-config
+  namespace: default
 data:
   settings.yaml: |
     title: Rubiconetic Home Lab
@@ -34,13 +35,13 @@ data:
             icon: vaultwarden.png
             href: "{{HOMEPAGE_VAR_VAULTWARDEN_URL}}"
             description: "Password Manager"
-            # ping: "http://vaultwarden-service"
+            # ping: "http://vaultwarden-service:8080"
     - Productivity:
         - SiYuan:
             icon: siyuan.png
             href: "{{HOMEPAGE_VAR_SIYUAN_URL}}"
             description: "Note Taking App"
-            # ping: "http://siyuan-service:6806"
+            # ping: "http://siyuan-service:8083"
   # (Standard boilerplate to keep it from crashing)
   widgets.yaml: |
     - resources:
