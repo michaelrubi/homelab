@@ -2,65 +2,50 @@
 
 ![Status](https://img.shields.io/badge/Status-Production-success?style=for-the-badge)
 ![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)
+![Flux](https://img.shields.io/badge/Flux-GitOps-2f618b?style=for-the-badge&logo=flux&logoColor=white)
 ![n8n](https://img.shields.io/badge/n8n-ff6584?style=for-the-badge&logo=n8n&logoColor=white)
 ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
-![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?style=for-the-badge&logo=Cloudflare&logoColor=white)
-
 ## 📖 Overview
-
-This repository contains the Infrastructure-as-Code (IaC) manifests for my personal Kubernetes cluster ("Rubiconetic"). The goal of this project was to migrate from a PaaS-based workflow (Coolify) to a fully self-hosted, distributed Kubernetes cluster running on bare-metal mini PCs.
-
-It serves as the production backend for my freelance automation business, hosting workflow engines, databases, and internal dashboards.
-
+This repository contains the **GitOps** Infrastructure-as-Code (IaC) manifests for my personal Kubernetes cluster ("Rubiconetic").
+It serves as the production backend for my freelance automation business, hosting workflow engines, databases, and internal dashboards. The entire cluster state is reconciled automatically from this repository using **FluxCD**.
 ## 🏗️ Architecture
-
 ### Network Strategy: The "Hybrid Access" Model
-
 I implemented a split-horizon network security model to balance client accessibility with internal security:
-
-- **Public Access (Client-Facing):** Uses **Cloudflare Tunnels** to expose specific webhook endpoints (n8n) to the internet without opening ports on the firewall. This allows GitHub/Stripe webhooks to reach the cluster securely via SSL.
-- **Private Access (Admin-Facing):** Uses **Tailscale** (Mesh VPN) for all administrative tools (CloudBeaver, Homepage, Longhorn). These services are completely invisible to the public internet and can only be accessed via authenticated devices.
-
-### Storage & Persistence
-
-- **Database:** Self-hosted PostgreSQL 16 running as a StatefulSet.
-- **Storage Class:** **Longhorn** provides distributed block storage, ensuring data persists even if a specific node fails.
-- **Disaster Recovery:** Automated pg_dump workflows back up data externally.
-
+- **Public Access (Client-Facing):** Uses **Cloudflare Tunnels** to expose specific webhook endpoints (n8n) to the internet without opening ports on the firewall.
+- **Private Access (Admin-Facing):** Uses **Tailscale** (Mesh VPN) for all administrative tools (Pgweb, Homepage, Longhorn). These services are completely invisible to the public internet.
+### GitOps & Automation
+- **Synchronization:** **FluxCD** watches this repository and automatically applies changes to the cluster within 1 minute.
+- **Secret Management:** Secrets are encrypted locally using **SOPS (Secrets OPerationS)** and **Age**, allowing credentials to be safely committed to the public repository.
+- **Auto-Restarts:** **Stakater Reloader** watches for secret changes and automatically restarts deployments to apply new credentials.
 ### Tech Stack
 
-| Component             | Technology      | Reasoning                                                                |
-| :-------------------- | :-------------- | :----------------------------------------------------------------------- |
-| **Orchestrator**      | **K3s**         | Lightweight, production-grade Kubernetes perfect for edge hardware.      |
-| **Ingress (Public)**  | **Cloudflared** | Zero-Trust tunneling; eliminates need for static IPs or port forwarding. |
-| **Ingress (Private)** | **Tailscale**   | Secure, encrypted mesh network for internal tooling access.              |
-| **Automation**        | **n8n**         | Self-hosted workflow automation engine.                                  |
-| **Observability**     | **Homepage**    | Centralized dashboard for service health and cluster stats.              |
-
+| Component | Technology  | Reasoning   |
+| :-------------------- | :-------------- | :------------------------------------------------------------------ |
+| **Orchestrator**  | **K3s** | Lightweight, production-grade Kubernetes perfect for edge hardware. |
+| **GitOps Engine** | **FluxCD**  | Automated reconciliation; "Git is the single source of truth."  |
+| **Secret Encryption** | **SOPS + Age**  | Client-side encryption allowing safe storage of secrets in Git. |
+| **Ingress (Public)**  | **Cloudflared** | Zero-Trust tunneling; eliminates need for static IPs.   |
+| **Ingress (Private)** | **Tailscale**   | Secure, encrypted mesh network for internal tooling access. |
+| **Storage**   | **Longhorn**| Distributed block storage for high availability.|
+| **Observability** | **Homepage**| Centralized dashboard for service health and cluster stats. |
 ## 📂 Repository Structure
-
-This repo follows a standard GitOps structure:
-
+This repo follows a standard Flux v2 GitOps structure:
 ```txt
+/clusters
+  └── my-cluster/# Flux Kustomization definitions & Sync config
 /manifests
-  ├── automation/        # n8n deployments & services
-  ├── infrastructure/    # Core networking (Cloudflared, Homepage)
-  ├── database/          # Postgres StatefulSets & CloudBeaver
-  └── secrets/           # (GitIgnored) Encrypted credentials
+  ├── automation/# n8n & Postgres deployments
+  ├── infrastructure/# Core networking (Cloudflared, Homepage) & Tools (Reloader)
+  ├── productivity/  # SiYuan & other apps
+  └── secrets/   # SOPS-encrypted Kubernetes Secrets
 ```
-
 ## Lessons Learned & Challenges
-
-- **DNS Hairpinning:** Encountered issues where internal services could not ping each other via their external Tailscale IPs. Resolved by implementing internal Kubernetes FQDNs (`svc.cluster.local`) for direct service-to-service communication.
-  - **Migration Strategy:** successfully migrated a live production database from Coolify to K3s by managing encryption key continuity and performing a clean `pg_dump`/`psql` restore process.
-- **Read-Only ConfigMaps:** Overcame application crashes in `Homepage` caused by read-only volume mounts by implementing correct config initialization strategies.
-
+- **The GitOps Transition:** Migrated from manual `kubectl apply` workflows to Flux. Learned to manage "Secret Zero" using SOPS and how to debug Kustomize reconciliation failures when encrypted metadata is malformed.
+- **DNS Hairpinning:** Resolved internal service communication issues by enforcing Kubernetes internal FQDNs (`svc.cluster.local`) instead of relying on external Tailscale IPs for pod-to-pod talk.
+- **Database Migration:** Successfully migrated a live production database from Coolify to K3s by managing encryption key continuity and performing a clean `pg_dump`/`psql` restore process.
 ## 🚀 Future Roadmap
-
-- \[ \] Implement **Sealed Secrets** to allow safe committing of encrypted secrets to Git.
-- \[ \] Add historical metrics monitoring.
-- \[ \] Automate OS patching.
-
+- [x] Implement **GitOps (Flux + SOPS)** to allow safe committing of encrypted secrets to Git.
+- [x] Configure **Renovate** for automated Docker image updates.
+- [ ] Add historical metrics monitoring (Prometheus/Grafana).
 ---
-
 Built & Maintained by Michael Rubi
