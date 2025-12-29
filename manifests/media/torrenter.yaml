@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: torrenter
-        image: michaelrubi/torrenter:latest
+        image: mrubi86/torrenter:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
