@@ -1,0 +1,83 @@
+# 2. Torrenter Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: torrenter-deployment
+  namespace: default
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: torrenter
+  template:
+    metadata:
+      labels:
+        app: torrenter
+    spec:
+      containers:
+      - name: torrenter
+        image: michaelrubi/torrenter:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+        env:
+        # SvelteKit Node Adapter config
+        - name: PORT
+          value: "3000"
+        - name: ADDRESS_HEADER
+          value: "True-Client-IP"
+        - name: XFF_DEPTH
+          value: "1"
+        # App Specific Config
+        - name: JACKETT_URL
+          valueFrom:
+            secretKeyRef:
+              name: torrenter-secrets
+              key: JACKETT_URL
+        - name: JACKETT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: torrenter-secrets
+              key: JACKETT_API_KEY
+        - name: TMDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: torrenter-secrets
+              key: TMDB_API_KEY
+
+---
+# 3. Torrenter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: torrenter-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: torrenter
+  ports:
+    - port: 4173
+      targetPort: 3000
