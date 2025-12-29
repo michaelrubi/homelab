@@ -55,10 +55,10 @@ data:
             # ping: "http://prometheus-service:9090/-/ready"
     - Media:
         - Torrenter:
-            icon: torrenter.png
+            icon: https://raw.githubusercontent.com/michaelrubi/torrenter/main/src/lib/assets/favicon.svg
             href: "http://wtc2.robin-mine.ts.net:4173"
             description: "Torrent Manager"
-            # ping: "http://torrenter-service:3000/health"
+            # ping: "http://torrenter-service:4173"
   widgets.yaml: |
     - resources:
         cpu: true
