@@ -1,0 +1,113 @@
+# 1. PVC for Jackett Configuration
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jackett-config-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+# 2. PVC for Downloads (Blackhole)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jackett-downloads-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+# 3. The Jackett Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jackett-deployment
+  namespace: default
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jackett
+  template:
+    metadata:
+      labels:
+        app: jackett
+    spec:
+      # Permissions matching your PUID/PGID 1000
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+      - name: jackett
+        image: lscr.io/linuxserver/jackett:latest
+        ports:
+        - containerPort: 9117
+        # --- HARDENING ---
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        # Jackett doesn't have a specific /healthz, but TCP check on port is reliable
+        livenessProbe:
+          tcpSocket:
+            port: 9117
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 9117
+          initialDelaySeconds: 5
+        # --- STORAGE CONFIG ---
+        volumeMounts:
+        - name: jackett-config
+          mountPath: /config
+        - name: jackett-downloads
+          mountPath: /downloads
+        # --- ENV VARIABLES ---
+        env:
+        - name: TZ
+          value: "America/Phoenix"
+        - name: PUID
+          value: "1000"
+        - name: PGID
+          value: "1000"
+        - name: AUTO_UPDATE
+          value: "true" # Optional in K8s if you manage image tags, but kept from compose
+      volumes:
+      - name: jackett-config
+        persistentVolumeClaim:
+          claimName: jackett-config-pvc
+      - name: jackett-downloads
+        persistentVolumeClaim:
+          claimName: jackett-downloads-pvc
+---
+# 4. The Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jackett-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: jackett
+  ports:
+    - port: 9117
+      targetPort: 9117
