@@ -53,6 +53,12 @@ data:
             href: "http://wtc2.robin-mine.ts.net:9090"
             description: "Metrics Collection"
             # ping: "http://prometheus-service:9090/-/ready"
+    - Media:
+        - Torrenter:
+            icon: torrenter.png
+            href: "http://wtc2.robin-mine.ts.net:4173"
+            description: "Torrent Manager"
+            # ping: "http://torrenter-service:3000/health"
   widgets.yaml: |
     - resources:
         cpu: true
