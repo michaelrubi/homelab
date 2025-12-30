@@ -38,7 +38,7 @@ data:
             # ping: "http://vaultwarden-service:8080"
         - CouchDB:
             icon: couchdb.png
-            href: "http://wtc2.robin-mine.ts.net:5984"
+            href: "http://wtc2.robin-mine.ts.net:5984/_utils/"
             description: "Obsidian-Sync Server"
             # ping: "http://obsidian-sync-service:5984"
     - Monitoring:
