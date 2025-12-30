@@ -19,15 +19,15 @@ I implemented a split-horizon network security model to balance client accessibi
 - **Auto-Restarts:** **Stakater Reloader** watches for secret changes and automatically restarts deployments to apply new credentials.
 ### Tech Stack
 
-| Component | Technology  | Reasoning   |
+| Component             | Technology      | Reasoning                                                           |
 | :-------------------- | :-------------- | :------------------------------------------------------------------ |
-| **Orchestrator**  | **K3s** | Lightweight, production-grade Kubernetes perfect for edge hardware. |
-| **GitOps Engine** | **FluxCD**  | Automated reconciliation; "Git is the single source of truth."  |
-| **Secret Encryption** | **SOPS + Age**  | Client-side encryption allowing safe storage of secrets in Git. |
-| **Ingress (Public)**  | **Cloudflared** | Zero-Trust tunneling; eliminates need for static IPs.   |
-| **Ingress (Private)** | **Tailscale**   | Secure, encrypted mesh network for internal tooling access. |
-| **Storage**   | **Longhorn**| Distributed block storage for high availability.|
-| **Observability** | **Homepage**| Centralized dashboard for service health and cluster stats. |
+| **Orchestrator**      | **K3s**         | Lightweight, production-grade Kubernetes perfect for edge hardware. |
+| **GitOps Engine**     | **FluxCD**      | Automated reconciliation; "Git is the single source of truth."      |
+| **Secret Encryption** | **SOPS + Age**  | Client-side encryption allowing safe storage of secrets in Git.     |
+| **Ingress (Public)**  | **Cloudflared** | Zero-Trust tunneling; eliminates need for static IPs.               |
+| **Ingress (Private)** | **Tailscale**   | Secure, encrypted mesh network for internal tooling access.         |
+| **Storage**           | **Longhorn**    | Distributed block storage for high availability.                    |
+| **Observability**     | **Homepage**    | Centralized dashboard for service health and cluster stats.         |
 ## 📂 Repository Structure
 This repo follows a standard Flux v2 GitOps structure:
 ```txt
@@ -36,7 +36,7 @@ This repo follows a standard Flux v2 GitOps structure:
 /manifests
   ├── automation/# n8n & Postgres deployments
   ├── infrastructure/# Core networking (Cloudflared, Homepage) & Tools (Reloader)
-  ├── productivity/  # SiYuan & other apps
+  ├── productivity/  # Obsidian Sync & other apps
   └── secrets/   # SOPS-encrypted Kubernetes Secrets
 ```
 ## Lessons Learned & Challenges

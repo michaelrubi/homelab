@@ -36,7 +36,7 @@ data:
             href: "{{HOMEPAGE_VAR_VAULTWARDEN_URL}}"
             description: "Password Manager"
             # ping: "http://vaultwarden-service:8080"
-        - SiYuan:
+        - CouchDB:
             icon: couchdb.png
             href: "http://wtc2.robin-mine.ts.net:5984"
             description: "Obsidian-Sync Server"
