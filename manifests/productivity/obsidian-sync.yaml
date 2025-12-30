@@ -105,7 +105,7 @@ metadata:
   name: obsidian-sync-service
   namespace: default
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: couchdb
   ports:
