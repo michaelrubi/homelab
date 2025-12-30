@@ -1,3 +1,30 @@
+# Config Map for CouchDB CORS settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: couchdb-config
+  namespace: default
+data:
+  10-obsidian-cors.ini: |
+    [httpd]
+    enable_cors = true
+
+    [chttpd]
+    enable_cors = true
+    require_valid_user = true
+
+    [chttpd_auth]
+    require_valid_user = true
+
+    [cors]
+    credentials = true
+    headers = accept, authorization, content-type, origin, referer
+    methods = GET, PUT, POST, HEAD, DELETE
+    # app://obsidian.md is for Desktop
+    # capacitor://localhost is for Mobile
+    # http://localhost is for local testing
+    origins = app://obsidian.md, capacitor://localhost, http://localhost
+---
 # Persistent Storage
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -60,10 +87,16 @@ spec:
         volumeMounts:
         - name: couchdb-data
           mountPath: /opt/couchdb/data
+        - name: couchdb-config
+          mountPath: /opt/couchdb/etc/local.d/10-obsidian-cors.ini
+          subPath: 10-obsidian-cors.ini
       volumes:
       - name: couchdb-data
         persistentVolumeClaim:
           claimName: couchdb-pvc
+      - name: couchdb-config
+        configMap:
+          name: couchdb-config
 ---
 # The Service
 apiVersion: v1
