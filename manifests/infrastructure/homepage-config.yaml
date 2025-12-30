@@ -36,12 +36,11 @@ data:
             href: "{{HOMEPAGE_VAR_VAULTWARDEN_URL}}"
             description: "Password Manager"
             # ping: "http://vaultwarden-service:8080"
-    - Productivity:
         - SiYuan:
-            icon: siyuan.png
-            href: "{{HOMEPAGE_VAR_SIYUAN_URL}}"
-            description: "Note Taking App"
-            # ping: "http://siyuan-service:8083"
+            icon: couchdb.png
+            href: "http://wtc2.robin-mine.ts.net:5984"
+            description: "Obsidian-Sync Server"
+            # ping: "http://obsidian-sync-service:5984"
     - Monitoring:
         - Grafana:
             icon: grafana.png

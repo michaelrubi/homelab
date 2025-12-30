@@ -32,11 +32,6 @@ spec:
             secretKeyRef:
               name: vaultwarden-secrets
               key: VW_URL
-        - name: HOMEPAGE_VAR_SIYUAN_URL
-          valueFrom:
-            secretKeyRef:
-              name: siyuan-secrets
-              key: SIYUAN_URL
         volumeMounts:
         - name: config
           mountPath: /app/config
