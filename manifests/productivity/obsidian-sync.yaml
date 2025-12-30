@@ -61,6 +61,15 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+      initContainers:
+      - name: copy-config
+        image: couchdb:3.5.1
+        command: ['sh', '-c', 'cp /tmp/config/10-obsidian-cors.ini /opt/couchdb/etc/local.d/10-obsidian-cors.ini']
+        volumeMounts:
+        - name: couchdb-config-source
+          mountPath: /tmp/config
+        - name: couchdb-config-writable
+          mountPath: /opt/couchdb/etc/local.d
       containers:
       - name: couchdb
         image: couchdb:3.5.1
@@ -87,16 +96,17 @@ spec:
         volumeMounts:
         - name: couchdb-data
           mountPath: /opt/couchdb/data
-        - name: couchdb-config
-          mountPath: /opt/couchdb/etc/local.d/10-obsidian-cors.ini
-          subPath: 10-obsidian-cors.ini
+        - name: couchdb-config-writable
+          mountPath: /opt/couchdb/etc/local.d
       volumes:
       - name: couchdb-data
         persistentVolumeClaim:
           claimName: couchdb-pvc
-      - name: couchdb-config
+      - name: couchdb-config-source
         configMap:
           name: couchdb-config
+      - name: couchdb-config-writable
+        emptyDir: {}
 ---
 # The Service
 apiVersion: v1
