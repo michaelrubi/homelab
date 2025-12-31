@@ -12,20 +12,6 @@ spec:
     requests:
       storage: 1Gi
 ---
-# 2. PVC for Downloads (Blackhole)
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: jackett-downloads-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 1Gi
----
 # 3. The Jackett Deployment
 apiVersion: apps/v1
 kind: Deployment

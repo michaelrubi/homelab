@@ -47,7 +47,7 @@ This repo follows a standard Flux v2 GitOps structure:
 - [x] Implement **GitOps (Flux + SOPS)** to allow safe committing of encrypted secrets to Git.
 - [x] Configure **Renovate** for automated Docker image updates.
 - [x] Add historical metrics monitoring (Prometheus/Grafana).
-- [X] **Cluster Hardening**: Add Liveness/Readiness probes and Resource Limits to all deployments.
+- [x] **Cluster Hardening**: Add Liveness/Readiness probes and Resource Limits to all deployments.
 - [ ] **Disaster Recovery**: Configure Longhorn S3 backups.
 - [ ] **Database Consolidation**: Migrate VaultWarden from SQLite to Postgres.
 - [ ] **Observability**: Set up Flux Notifications (Discord/Slack).
