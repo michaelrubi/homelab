@@ -10,7 +10,7 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 512Mi
+      storage: 1Gi
 ---
 # PVC for Downloads (Blackhole)
 apiVersion: v1
@@ -24,7 +24,7 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 256Mi
+      storage: 1Gi
 ---
 # The Jackett Deployment
 apiVersion: apps/v1
