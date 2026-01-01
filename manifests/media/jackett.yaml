@@ -75,14 +75,35 @@ spec:
         - name: PGID
           value: "1000"
         - name: AUTO_UPDATE
-          value: "true" # Optional in K8s if you manage image tags, but kept from compose
+          value: "true"
+      # --- FLARESOLVERR SIDECAR ---
+      - name: flaresolverr
+        image: flaresolverr/flaresolverr:latest
+        ports:
+        - containerPort: 8191
+          name: flaresolverr
+        env:
+        - name: LOG_LEVEL
+          value: info
+        - name: TZ
+          value: America/Phoenix
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1024Mi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8191
+          initialDelaySeconds: 10
+          periodSeconds: 20
       volumes:
       - name: jackett-config
         persistentVolumeClaim:
           claimName: jackett-config-pvc
-      - name: jackett-downloads
-        persistentVolumeClaim:
-          claimName: jackett-downloads-pvc
 ---
 # 4. The Service
 apiVersion: v1
