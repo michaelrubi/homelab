@@ -1,4 +1,4 @@
-# 1. PVC for Jackett Configuration
+# PVC for Jackett Configuration
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -10,9 +10,23 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 1Gi
+      storage: 512Mi
 ---
-# 3. The Jackett Deployment
+# PVC for Downloads (Blackhole)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jackett-downloads-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 256Mi
+---
+# The Jackett Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,17 +46,16 @@ spec:
       labels:
         app: jackett
     spec:
-      # Permissions matching your PUID/PGID 1000
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
         runAsGroup: 1000
       containers:
+      # --- JACKETT CONTAINER ---
       - name: jackett
         image: lscr.io/linuxserver/jackett:latest
         ports:
         - containerPort: 9117
-        # --- HARDENING ---
         resources:
           requests:
             memory: "256Mi"
@@ -50,7 +63,6 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
-        # Jackett doesn't have a specific /healthz, but TCP check on port is reliable
         livenessProbe:
           tcpSocket:
             port: 9117
@@ -60,13 +72,11 @@ spec:
           tcpSocket:
             port: 9117
           initialDelaySeconds: 5
-        # --- STORAGE CONFIG ---
         volumeMounts:
         - name: jackett-config
           mountPath: /config
         - name: jackett-downloads
           mountPath: /downloads
-        # --- ENV VARIABLES ---
         env:
         - name: TZ
           value: "America/Phoenix"
@@ -76,6 +86,7 @@ spec:
           value: "1000"
         - name: AUTO_UPDATE
           value: "true"
+      
       # --- FLARESOLVERR SIDECAR ---
       - name: flaresolverr
         image: flaresolverr/flaresolverr:latest
@@ -100,10 +111,15 @@ spec:
             port: 8191
           initialDelaySeconds: 10
           periodSeconds: 20
+
+      # --- VOLUMES ---
       volumes:
       - name: jackett-config
         persistentVolumeClaim:
           claimName: jackett-config-pvc
+      - name: jackett-downloads
+        persistentVolumeClaim:
+          claimName: jackett-downloads-pvc
 ---
 # 4. The Service
 apiVersion: v1
