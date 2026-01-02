@@ -1,4 +1,4 @@
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: intel-gpu-plugin
@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: intel-device-plugins-gpu
-      version: "0.30.0" # You can use ">=0.26.0" or a specific version
+      version: "0.30.0"
       sourceRef:
         kind: HelmRepository
         name: intel
@@ -17,4 +17,4 @@ spec:
     # This creates the 'gpu.intel.com/i915' resource
     sharedDevNum: 5  # Allow up to 5 containers to share the GPU (useful if you add Tdarr later)
     nodeSelector:
-      gpu-intel: "true" # Only run on nodes we labeled (your gmktec01)
+      gpu-intel: "true" # Only run on labeled nodes 
