@@ -95,9 +95,7 @@ spec:
                   name: forgejo-secrets
                   key: FORGEJO_URL
             - name: FORGEJO__security__INSTALL_LOCK
-              value: "true" # Assume configured after first run or we rely on auto-setup
-            # Admin setup can be done via CLI or initial web UI.
-            # We skip auto-admin creation to avoid complex secret handling unless requested.
+              value: "true"
           volumeMounts:
             - name: data
               mountPath: /data
@@ -133,7 +131,7 @@ spec:
     app: forgejo
   ports:
     - name: http
-      port: 3000
+      port: 8085
       targetPort: 3000
       protocol: TCP
     - name: ssh
