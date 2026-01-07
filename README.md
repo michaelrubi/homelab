@@ -3,6 +3,7 @@
 ![Status](https://img.shields.io/badge/Status-Production-success?style=for-the-badge)
 ![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Flux](https://img.shields.io/badge/Flux-GitOps-2f618b?style=for-the-badge&logo=flux&logoColor=white)
+![Forgejo](https://img.shields.io/badge/Forgejo-Git_Service-fa5a5a?style=for-the-badge&logo=forgejo&logoColor=white)
 ![n8n](https://img.shields.io/badge/n8n-ff6584?style=for-the-badge&logo=n8n&logoColor=white)
 ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
 ## 📖 Overview
@@ -17,7 +18,7 @@ I implemented a split-horizon network security model to balance client accessibi
 - **Synchronization:** **FluxCD** watches this repository and automatically applies changes to the cluster within 1 minute.
 - **Secret Management:** Secrets are encrypted locally using **SOPS (Secrets OPerationS)** and **Age**, allowing credentials to be safely committed to the public repository.
 - **Auto-Restarts:** **Stakater Reloader** watches for secret changes and automatically restarts deployments to apply new credentials.
-### Tech Stack
+### Infrastructure
 
 | Component             | Technology      | Reasoning                                                           |
 | :-------------------- | :-------------- | :------------------------------------------------------------------ |
@@ -28,6 +29,18 @@ I implemented a split-horizon network security model to balance client accessibi
 | **Ingress (Private)** | **Tailscale**   | Secure, encrypted mesh network for internal tooling access.         |
 | **Storage**           | **Longhorn**    | Distributed block storage for high availability.                    |
 | **Observability**     | **Homepage**    | Centralized dashboard for service health and cluster stats.         |
+
+### Hosted Applications
+
+| Application       | Function                  | Details                                                      |
+| :---------------- | :------------------------ | :----------------------------------------------------------- |
+| **Forgejo**       | Source Code Management    | Self-hosted lightweight Git service (Gitea fork).            |
+| **Vaultwarden**   | Password Manager          | Bitwarden-compatible server for credential management.       |
+| **n8n**           | Workflow Automation       | Node-based workflow automation tool.                         |
+| **Postgres**      | Database                  | Relational database for n8n and internal apps.               |
+| **Media Stack**   | Torrenter + Jackett       | Automated media retrieval and management.                    |
+| **Obsidian Sync** | Note Synchronization      | Self-hosted LiveSync for Obsidian notes.                     |
+| **Monitoring**    | Prometheus / Grafana      | Metrics collection and visualization (Kube-Prometheus-Stack).|
 ## 📂 Repository Structure
 This repo follows a standard Flux v2 GitOps structure:
 ```txt
@@ -36,7 +49,8 @@ This repo follows a standard Flux v2 GitOps structure:
 /manifests
   ├── automation/# n8n & Postgres deployments
   ├── infrastructure/# Core networking (Cloudflared, Homepage) & Tools (Reloader)
-  ├── productivity/  # Obsidian Sync & other apps
+  ├── media/         # Media stack (Torrenter, Jackett)
+  ├── productivity/  # Forgejo, Obsidian Sync & other apps
   └── secrets/   # SOPS-encrypted Kubernetes Secrets
 ```
 ## Lessons Learned & Challenges
