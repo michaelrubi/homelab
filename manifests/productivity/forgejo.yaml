@@ -1,0 +1,142 @@
+# 1. PVC for Forgejo DB
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-db-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+# 2. PVC for Forgejo Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-data-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+# 3. Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo
+  namespace: default
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: forgejo
+  template:
+    metadata:
+      labels:
+        app: forgejo
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        # --- Postgres ---
+        - name: postgres
+          image: postgres:14-alpine
+          env:
+            - name: POSTGRES_USER
+              value: forgejo
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-secrets
+                  key: FORGEJO_DB_PASSWORD
+            - name: POSTGRES_DB
+              value: forgejo
+          volumeMounts:
+            - name: db-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+        # --- Forgejo ---
+        - name: forgejo
+          image: codeberg.org/forgejo/forgejo:9
+          env:
+            - name: FORGEJO__database__DB_TYPE
+              value: postgres
+            - name: FORGEJO__database__HOST
+              value: "127.0.0.1:5432"
+            - name: FORGEJO__database__NAME
+              value: forgejo
+            - name: FORGEJO__database__USER
+              value: forgejo
+            - name: FORGEJO__database__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-secrets
+                  key: FORGEJO_DB_PASSWORD
+            - name: FORGEJO__server__ROOT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-secrets
+                  key: FORGEJO_URL
+            - name: FORGEJO__security__INSTALL_LOCK
+              value: "true" # Assume configured after first run or we rely on auto-setup
+            # Admin setup can be done via CLI or initial web UI.
+            # We skip auto-admin creation to avoid complex secret handling unless requested.
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          ports:
+            - containerPort: 3000
+              name: http
+            - containerPort: 22
+              name: ssh
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: forgejo-db-pvc
+        - name: data
+          persistentVolumeClaim:
+            claimName: forgejo-data-pvc
+---
+# 4. Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: forgejo
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+    - name: ssh
+      port: 2222
+      targetPort: 22
+      protocol: TCP
