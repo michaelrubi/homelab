@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate
+  namespace: default
+spec:
+  schedule: "0 * * * *" # Runs every hour
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: renovate
+              image: renovate/renovate:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                # Tell Renovate we are using Forgejo (uses Gitea platform logic)
+                - name: RENOVATE_PLATFORM
+                  value: "gitea"
+
+                # Internal K8s Service URL (Fast & Secure)
+                # Note: We append /api/v1 for the Renovate endpoint
+                - name: RENOVATE_ENDPOINT
+                  value: "http://forgejo-service.default.svc.cluster.local:3000/api/v1"
+
+                # Scan all repos this bot has access to
+                - name: RENOVATE_AUTODISCOVER
+                  value: "true"
+
+                # The Identity used for commits
+                - name: RENOVATE_GIT_AUTHOR
+                  value: "Renovate Bot <renovate@rubiconetic.com>"
+
+                # Secrets
+                - name: RENOVATE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: forgejo-secrets # Ensure this matches your Secret name
+                      key: RENOVATE_TOKEN
+
+                # Optional: GitHub Token for fetching release notes/changelogs
+                # (Renovate hits GitHub's public API to read changelogs even for private internal tools)
+                - name: GITHUB_COM_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: forgejo-secrets
+                      key: RENOVATE_GITHUB_TOKEN
+
+              resources:
+                requests:
+                  memory: "512Mi"
+                  cpu: "200m"
+                limits:
+                  memory: "2Gi"
+          restartPolicy: Never

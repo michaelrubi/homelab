@@ -10,8 +10,10 @@ spec:
   ref:
     branch: master
   secretRef:
-    name: flux-system
-  url: ssh://git@github.com/michaelrubi/homelab
+    name: forgejo-auth
+    url: http://forgejo-service.default.svc.cluster.local:3000/michael/homelab.git
+    # name: flux-system
+    # url: ssh://git@github.com/michaelrubi/homelab
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
