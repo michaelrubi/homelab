@@ -15,39 +15,44 @@ spec:
     spec:
       serviceAccountName: homepage
       containers:
-      - name: homepage
-        image: ghcr.io/gethomepage/homepage:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: HOMEPAGE_ALLOWED_HOSTS
-          value: "*"
-        - name: HOMEPAGE_VAR_N8N_URL
-          valueFrom: 
-            secretKeyRef:
-              name: n8n-secrets
-              key: N8N_URL
-        - name: HOMEPAGE_VAR_VAULTWARDEN_URL
-          valueFrom:
-            secretKeyRef:
-              name: vaultwarden-secrets
-              key: VW_URL
-        - name: HOMEPAGE_VAR_COUCHDB_URL
-          valueFrom:
-            secretKeyRef:
-              name: obsidian-secrets
-              key: COUCHDB_URL
-        volumeMounts:
-        - name: config
-          mountPath: /app/config
-        - name: logs
-          mountPath: /app/config/logs
+        - name: homepage
+          image: ghcr.io/gethomepage/homepage:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: HOMEPAGE_ALLOWED_HOSTS
+              value: "*"
+            - name: HOMEPAGE_VAR_N8N_URL
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-secrets
+                  key: N8N_URL
+            - name: HOMEPAGE_VAR_VAULTWARDEN_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-secrets
+                  key: VW_URL
+            - name: HOMEPAGE_VAR_COUCHDB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: obsidian-secrets
+                  key: COUCHDB_URL
+            - name: HOMEPAGE_VAR_FREESCOUT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: freescout-secrets
+                  key: FREESCOUT_SITE_URL
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+            - name: logs
+              mountPath: /app/config/logs
       volumes:
-      - name: config
-        configMap:
-          name: homepage-config
-      - name: logs
-        emptyDir: {}
+        - name: config
+          configMap:
+            name: homepage-config
+        - name: logs
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

@@ -58,6 +58,12 @@ data:
             href: "http://wtc2.robin-mine.ts.net:4173"
             description: "Torrent Manager"
             # ping: "http://torrenter-service:4173"
+    - Productivity:
+        - FreeScout:
+            icon: freescout.png
+            href: "{{HOMEPAGE_VAR_FREESCOUT_URL}}"
+            description: "Ticket Management"
+            # ping: "http://freescout-service:8080"
   widgets.yaml: |
     - resources:
         cpu: true
