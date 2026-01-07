@@ -59,11 +59,6 @@ data:
             description: "Torrent Manager"
             # ping: "http://torrenter-service:4173"
     - Productivity:
-        - FreeScout:
-            icon: freescout.png
-            href: "{{HOMEPAGE_VAR_FREESCOUT_URL}}"
-            description: "Ticket Management"
-            # ping: "http://freescout-service:8080"
         - Forgejo:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"

@@ -37,11 +37,6 @@ spec:
                 secretKeyRef:
                   name: obsidian-secrets
                   key: COUCHDB_URL
-            - name: HOMEPAGE_VAR_FREESCOUT_URL
-              valueFrom:
-                secretKeyRef:
-                  name: freescout-secrets
-                  key: FREESCOUT_SITE_URL
             - name: HOMEPAGE_VAR_FORGEJO_URL
               valueFrom:
                 secretKeyRef:
