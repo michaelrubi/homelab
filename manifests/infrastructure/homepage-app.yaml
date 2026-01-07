@@ -42,6 +42,11 @@ spec:
                 secretKeyRef:
                   name: freescout-secrets
                   key: FREESCOUT_SITE_URL
+            - name: HOMEPAGE_VAR_FORGEJO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-secrets
+                  key: FORGEJO_URL
           volumeMounts:
             - name: config
               mountPath: /app/config

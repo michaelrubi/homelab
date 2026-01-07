@@ -64,6 +64,11 @@ data:
             href: "{{HOMEPAGE_VAR_FREESCOUT_URL}}"
             description: "Ticket Management"
             # ping: "http://freescout-service:8080"
+        - Forgejo:
+            icon: forgejo.png
+            href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"
+            description: "Git Service"
+            # ping: "http://forgejo-service:3000"
   widgets.yaml: |
     - resources:
         cpu: true
