@@ -98,10 +98,7 @@ spec:
                   name: freescout-secrets
                   key: FREESCOUT_SITE_URL
             - name: ADMIN_EMAIL
-              valueFrom:
-                secretKeyRef:
-                  name: freescout-secrets
-                  key: FREESCOUT_ADMIN_EMAIL
+              value: admin@email.com
             - name: ADMIN_PASS
               valueFrom:
                 secretKeyRef:
