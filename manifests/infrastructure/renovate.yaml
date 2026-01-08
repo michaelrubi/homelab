@@ -36,7 +36,7 @@ spec:
                 - name: RENOVATE_TOKEN
                   valueFrom:
                     secretKeyRef:
-                      name: forgejo-secrets # Ensure this matches your Secret name
+                      name: renovate-secrets # Ensure this matches your Secret name
                       key: RENOVATE_TOKEN
 
                 # Optional: GitHub Token for fetching release notes/changelogs
@@ -44,7 +44,7 @@ spec:
                 - name: GITHUB_COM_TOKEN
                   valueFrom:
                     secretKeyRef:
-                      name: forgejo-secrets
+                      name: renovate-secrets
                       key: RENOVATE_GITHUB_TOKEN
 
               resources:
