@@ -42,6 +42,26 @@ spec:
                 secretKeyRef:
                   name: forgejo-secrets
                   key: FORGEJO_URL
+            - name: HOMEPAGE_VAR_JELLYFIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jellyfin-secrets
+                  key: JELLYFIN_KEY
+            - name: HOMEPAGE_VAR_JELLYFIN_IP
+              valueFrom:
+                secretKeyRef:
+                  name: jellyfin-secrets
+                  key: JELLYFIN_IP
+            - name: HOMEPAGE_VAR_HA_IP
+              valueFrom:
+                secretKeyRef:
+                  name: homeassistant-secrets
+                  key: HA_IP
+            - name: HOMEPAGE_VAR_HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: homeassistant-secrets
+                  key: HA_TOKEN
           volumeMounts:
             - name: config
               mountPath: /app/config

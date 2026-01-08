@@ -38,7 +38,7 @@ I implemented a split-horizon network security model to balance client accessibi
 | **Vaultwarden**   | Password Manager          | Bitwarden-compatible server for credential management.       |
 | **n8n**           | Workflow Automation       | Node-based workflow automation tool.                         |
 | **Postgres**      | Database                  | Relational database for n8n and internal apps.               |
-| **Media Stack**   | Torrenter + Jackett       | Automated media retrieval and management.                    |
+| **Media Stack** | Torrenter + Jackett       | **Search & Indexing only.** Actual downloads/encoding handled on external workstation via Samba/Jellyfin. |
 | **Obsidian Sync** | Note Synchronization      | Self-hosted LiveSync for Obsidian notes.                     |
 | **Monitoring**    | Prometheus / Grafana      | Metrics collection and visualization (Kube-Prometheus-Stack).|
 ## 📂 Repository Structure
@@ -63,9 +63,10 @@ This repo follows a standard Flux v2 GitOps structure:
 - [x] Add historical metrics monitoring (Prometheus/Grafana).
 - [x] **Cluster Hardening**: Add Liveness/Readiness probes and Resource Limits to all deployments.
 - [x] **Migrate to Forgejo**: Migrate from GitHub to Forgejo for source code management.
+- [ ] **External Integrations**: Add Homepage widgets for Jellyfin (External) and Home Assistant Green.
 - [ ] **Disaster Recovery**: Configure Longhorn S3 backups.
 - [ ] **Database Consolidation**: Migrate VaultWarden from SQLite to Postgres.
 - [ ] **Observability**: Set up Flux Notifications (Discord/Slack).
-- [ ] **New Apps**: Deploy **ntfy** for push notifications.
+
 ---
 Built & Maintained by Michael Rubi

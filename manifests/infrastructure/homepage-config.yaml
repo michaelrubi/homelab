@@ -20,8 +20,6 @@ data:
             icon: n8n.png
             href: "{{HOMEPAGE_VAR_N8N_URL}}"
             description: "Workflow Automation"
-            # ping: "http://n8n-service:5678/healthz"
-
     - Infrastructure:
         - pgweb:
             icon: postgresql.png
@@ -35,35 +33,49 @@ data:
             icon: vaultwarden.png
             href: "{{HOMEPAGE_VAR_VAULTWARDEN_URL}}"
             description: "Password Manager"
-            # ping: "http://vaultwarden-service:8080"
         - CouchDB:
             icon: couchdb.png
             href: "{{HOMEPAGE_VAR_COUCHDB_URL}}"
             description: "Obsidian-Sync Server"
-            # ping: "http://obsidian-sync-service:5984"
     - Monitoring:
         - Grafana:
             icon: grafana.png
             href: "http://wtc2.robin-mine.ts.net:8084"
             description: "Metrics Dashboard"
-            # ping: "http://grafana-service:8084/api/health"
         - Prometheus:
             icon: prometheus.png
             href: "http://wtc2.robin-mine.ts.net:9090"
             description: "Metrics Collection"
-            # ping: "http://prometheus-service:9090/-/ready"
     - Media:
         - Torrenter:
             icon: https://raw.githubusercontent.com/michaelrubi/torrenter/main/src/lib/assets/favicon.svg
             href: "http://wtc2.robin-mine.ts.net:4173"
             description: "Torrent Manager"
-            # ping: "http://torrenter-service:4173"
+        - Jellyfin:
+            icon: jellyfin.png
+            href: "{{HOMEPAGE_VAR_JELLYFIN_IP}}"
+            description: "Media Server (External)"
+            widget:
+              type: jellyfin
+              url: "{{HOMEPAGE_VAR_JELLYFIN_IP}}"
+              key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
+              enableBlocks: true
+    - Smart Home:
+        - Home Assistant:
+            icon: home-assistant.png
+            href: "{{HOMEPAGE_VAR_HA_IP}}"
+            description: "HA Green"
+            widget:
+              type: homeassistant
+              url: "{{HOMEPAGE_VAR_HA_IP}}"
+              key: "{{HOMEPAGE_VAR_HA_TOKEN}}"
+              
     - Productivity:
         - Forgejo:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"
             description: "Git Service"
-            # ping: "http://forgejo-service:3000"
+
   widgets.yaml: |
     - resources:
         cpu: true
@@ -78,20 +90,13 @@ data:
     []
   glances.yaml: |
     []
-  plex.yaml: |
-    []
-  jellyfin.yaml: |
-    []
-  tautulli.yaml: |
-    []
-  sabnzbd.yaml: |
-    []
-  radarr.yaml: |
-    []
-  sonarr.yaml: |
-    []
-  bookmarks.yaml: |
-    []
+  plex.yaml: []
+  jellyfin.yaml: []
+  tautulli.yaml: []
+  sabnzbd.yaml: []
+  radarr.yaml: []
+  sonarr.yaml: []
+  bookmarks.yaml: []
   custom.css: |
     /* Custom CSS */
   custom.js: |
