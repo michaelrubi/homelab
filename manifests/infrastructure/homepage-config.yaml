@@ -90,13 +90,20 @@ data:
     []
   glances.yaml: |
     []
-  plex.yaml: []
-  jellyfin.yaml: []
-  tautulli.yaml: []
-  sabnzbd.yaml: []
-  radarr.yaml: []
-  sonarr.yaml: []
-  bookmarks.yaml: []
+  plex.yaml: |
+    []
+  jellyfin.yaml: |
+    []
+  tautulli.yaml: |
+    []
+  sabnzbd.yaml: |
+    []
+  radarr.yaml: |
+    []
+  sonarr.yaml: |
+    []
+  bookmarks.yaml: |
+    []
   custom.css: |
     /* Custom CSS */
   custom.js: |
