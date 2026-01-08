@@ -4,10 +4,10 @@
     ],
     "ignoreUnstable": true,
     "assignees": [
-        "michaelrubi"
+        "michael"
     ],
     "reviewers": [
-        "michaelrubi"
+        "michael"
     ],
     "kubernetes": {
         "fileMatch": [
