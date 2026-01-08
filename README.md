@@ -63,7 +63,7 @@ This repo follows a standard Flux v2 GitOps structure:
 - [x] Add historical metrics monitoring (Prometheus/Grafana).
 - [x] **Cluster Hardening**: Add Liveness/Readiness probes and Resource Limits to all deployments.
 - [x] **Migrate to Forgejo**: Migrate from GitHub to Forgejo for source code management.
-- [ ] **External Integrations**: Add Homepage widgets for Jellyfin (External) and Home Assistant Green.
+- [x] **External Integrations**: Add Homepage widgets for Jellyfin (External) and Home Assistant Green.
 - [ ] **Disaster Recovery**: Configure Longhorn S3 backups.
 - [ ] **Database Consolidation**: Migrate VaultWarden from SQLite to Postgres.
 - [ ] **Observability**: Set up Flux Notifications (Discord/Slack).
