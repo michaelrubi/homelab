@@ -105,6 +105,12 @@ data:
   bookmarks.yaml: |
     []
   custom.css: |
-    /* Custom CSS */
+    /* 
+      Custom CSS 
+      Example:
+      body {
+        background-color: #1a1a1a;
+      }
+    */
   custom.js: |
     /* Custom JS */
