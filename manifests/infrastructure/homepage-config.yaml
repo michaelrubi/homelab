@@ -111,6 +111,9 @@ data:
       body {
         background-color: #1a1a1a;
       }
+      .dark {
+        --bg-color: #1a1a1a;
+      }
     */
   custom.js: |
     /* Custom JS */
