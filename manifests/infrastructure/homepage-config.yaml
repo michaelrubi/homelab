@@ -105,9 +105,6 @@ data:
   bookmarks.yaml: |
     []
   custom.css: |
-    body {
-      background-color: #1a1a1a !important;
-    }
     .dark {
       --bg-color: #1a1a1a !important;
     }
