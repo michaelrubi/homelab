@@ -65,7 +65,7 @@ spec:
               name: vaultwarden-secrets
               key: VW_URL
         - name: SIGNUPS_ALLOWED
-          value: "true"
+          value: "false"
         volumeMounts:
         - name: vaultwarden-data
           mountPath: /data
