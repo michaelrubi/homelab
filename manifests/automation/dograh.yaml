@@ -39,11 +39,11 @@ spec:
             #     secretKeyRef:
             #       name: dograh-secrets
             #       key: OPENAI_API_KEY
-            - name: DEEPGRAM_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: dograh-secrets
-                  key: DEEPGRAM_API_KEY
+            # - name: DEEPGRAM_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: dograh-secrets
+            #       key: DEEPGRAM_API_KEY
             - name: TWILIO_ACCOUNT_SID
               valueFrom:
                 secretKeyRef:
