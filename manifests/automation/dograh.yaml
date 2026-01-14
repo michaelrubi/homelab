@@ -149,6 +149,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: traefik
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: default-dograh-auth@kubernetescrd
     gethomepage.dev/enabled: "true"
     gethomepage.dev/name: "Dograh Voice"
     gethomepage.dev/group: "Automation"
@@ -193,3 +194,13 @@ spec:
       targetPort: 8000
   selector:
     app: dograh-api
+---
+# Authentication Middleware
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dograh-auth
+  namespace: default
+spec:
+  basicAuth:
+    secret: dograh-secrets
