@@ -180,3 +180,16 @@ spec:
     - hosts:
         - agent.rubi.home
       secretName: dograh-tls
+---
+# Service Alias for UI compatibility
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: default
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: dograh-api
