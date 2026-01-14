@@ -36,28 +36,34 @@ spec:
             - name: MINIO_BUCKET
               value: "voice-audio"
             - name: MINIO_ACCESS_KEY
-              value: minioadmin
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: MINIO_ACCESS_KEY
             - name: MINIO_SECRET_KEY
-              value: minioadmin
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: MINIO_SECRET_KEY
             - name: MINIO_SECURE
               value: "false"
 
             # Secrets
             - name: GOOGLE_API_KEY
               valueFrom:
-                { secretKeyRef: { name: dograh-secrets, key: GOOGLE_API_KEY } }
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: GOOGLE_API_KEY
             - name: TWILIO_ACCOUNT_SID
               valueFrom:
-                {
-                  secretKeyRef:
-                    { name: dograh-secrets, key: TWILIO_ACCOUNT_SID },
-                }
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: TWILIO_ACCOUNT_SID
             - name: TWILIO_AUTH_TOKEN
               valueFrom:
-                {
-                  secretKeyRef:
-                    { name: dograh-secrets, key: TWILIO_AUTH_TOKEN },
-                }
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: TWILIO_AUTH_TOKEN
           ports:
             - containerPort: 8000
 ---
@@ -91,7 +97,7 @@ spec:
     spec:
       containers:
         - name: ui
-          image: ghcr.io/dograh-hq/dograh-ui:latest #
+          image: ghcr.io/dograh-hq/dograh-ui:1.10.0
           imagePullPolicy: Always
           env:
             # Internal cluster URL for Server-Side Rendering
@@ -129,6 +135,7 @@ metadata:
     gethomepage.dev/icon: "mic.png"
     gethomepage.dev/description: "AI Voice Agent Platform"
 spec:
+  ingressClassName: traefik
   rules:
     - host: agent.rubi.home
       http:

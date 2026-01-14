@@ -41,6 +41,13 @@ metadata:
   name: dograh-db
   namespace: default
 spec:
+  initContainers:
+    - name: fix-permissions
+      image: busybox
+      command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data"]
+      volumeMounts:
+        - name: dograh-db-data
+          mountPath: /var/lib/postgresql/data
   replicas: 1
   selector:
     matchLabels:
@@ -55,11 +62,20 @@ spec:
           image: postgres:17 #
           env:
             - name: POSTGRES_USER
-              value: postgres
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
-              value: postgres # REPLACE with secretKeyRef
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
-              value: postgres
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: POSTGRES_DB
           volumeMounts:
             - name: dograh-db-data
               mountPath: /var/lib/postgresql/data
@@ -98,6 +114,13 @@ metadata:
   name: dograh-minio
   namespace: default
 spec:
+  initContainers:
+    - name: fix-permissions
+      image: busybox
+      command: ["sh", "-c", "chown -R 1000:1000 /data"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
   replicas: 1
   selector:
     matchLabels:
@@ -113,9 +136,15 @@ spec:
           command: ["server", "/data", "--console-address", ":9001"]
           env:
             - name: MINIO_ROOT_USER
-              value: minioadmin # REPLACE with secretKeyRef
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: MINIO_ROOT_USER
             - name: MINIO_ROOT_PASSWORD
-              value: minioadmin # REPLACE with secretKeyRef
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: MINIO_ROOT_PASSWORD
           ports:
             - containerPort: 9000
             - containerPort: 9001
