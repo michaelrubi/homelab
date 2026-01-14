@@ -59,12 +59,12 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: dograh-secrets
-                  key: MINIO_ACCESS_KEY
+                  key: MINIO_ROOT_USER
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: dograh-secrets
-                  key: MINIO_SECRET_KEY
+                  key: MINIO_ROOT_PASSWORD
             - name: MINIO_SECURE
               value: "false"
 
