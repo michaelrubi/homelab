@@ -1,11 +1,13 @@
+# manifests/automation/dograh-db.yaml
 ---
-# Redis for Conversation State
+# Redis
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dograh-redis
   namespace: default
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: dograh-redis
@@ -16,7 +18,8 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7-alpine
+          image: redis:7 #
+          command: ["redis-server", "--requirepass", "redissecret"] # Recommended to use a secret in prod
           ports:
             - containerPort: 6379
 ---
@@ -31,13 +34,14 @@ spec:
   selector:
     app: dograh-redis
 ---
-# Postgres for Agent Configs
+# Postgres
 apiVersion: apps/v1
-kind: Deployment
+kind: Deployment # Switched to Deployment for simplicity, StatefulSet preferred for prod
 metadata:
   name: dograh-db
   namespace: default
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: dograh-db
@@ -48,16 +52,14 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: postgres:17 #
           env:
             - name: POSTGRES_USER
-              value: dograh
+              value: postgres
             - name: POSTGRES_PASSWORD
-              value: dograh # Change this or use a Secret reference!
+              value: postgres # REPLACE with secretKeyRef
             - name: POSTGRES_DB
-              value: dograh
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              value: postgres
           volumeMounts:
             - name: dograh-db-data
               mountPath: /var/lib/postgresql/data
@@ -83,9 +85,70 @@ metadata:
   name: dograh-db-pvc
   namespace: default
 spec:
-  accessModes:
-    - ReadWriteOnce
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
   resources:
     requests:
       storage: 5Gi
-  storageClassName: longhorn # Explicitly using your Longhorn storage
+---
+# MinIO (Object Storage) - MISSING IN YOUR ORIGINAL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dograh-minio
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dograh-minio
+  template:
+    metadata:
+      labels:
+        app: dograh-minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio
+          command: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              value: minioadmin # REPLACE with secretKeyRef
+            - name: MINIO_ROOT_PASSWORD
+              value: minioadmin # REPLACE with secretKeyRef
+          ports:
+            - containerPort: 9000
+            - containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dograh-minio-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dograh-minio
+  namespace: default
+spec:
+  ports:
+    - port: 9000
+      name: api
+    - port: 9001
+      name: console
+  selector:
+    app: dograh-minio
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dograh-minio-pvc
+  namespace: default
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi

@@ -1,79 +1,126 @@
+# manifests/automation/dograh.yaml
+---
+# API Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dograh
+  name: dograh-api
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: dograh
+      app: dograh-api
   template:
     metadata:
       labels:
-        app: dograh
+        app: dograh-api
     spec:
       containers:
-        - name: dograh
-          image: dograhai/dograh-api:latest # Updated to correct Docker Hub image
+        - name: api
+          image: ghcr.io/dograh-hq/dograh-api:latest #
           imagePullPolicy: Always
-          ports:
-            - containerPort: 3010
-              name: http
           env:
-            # Connect to the DBs we just made
+            - name: ENVIRONMENT
+              value: "local"
             - name: DATABASE_URL
-              value: "postgresql+asyncpg://dograh:dograh@dograh-db:5432/dograh"
+              value: "postgresql+asyncpg://postgres:postgres@dograh-db:5432/postgres"
             - name: REDIS_URL
-              value: "redis://dograh-redis:6379/0"
+              value: "redis://:redissecret@dograh-redis:6379"
 
-            # Link to Secrets
-            # Inside containers -> env:
+            # MinIO Config
+            - name: ENABLE_AWS_S3
+              value: "false"
+            - name: MINIO_ENDPOINT
+              value: "dograh-minio:9000"
+            - name: MINIO_BUCKET
+              value: "voice-audio"
+            - name: MINIO_ACCESS_KEY
+              value: minioadmin
+            - name: MINIO_SECRET_KEY
+              value: minioadmin
+            - name: MINIO_SECURE
+              value: "false"
+
+            # Secrets
             - name: GOOGLE_API_KEY
               valueFrom:
-                secretKeyRef:
-                  name: dograh-secrets
-                  key: GOOGLE_API_KEY
-            # - name: OPENAI_API_KEY
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: dograh-secrets
-            #       key: OPENAI_API_KEY
-            # - name: DEEPGRAM_API_KEY
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: dograh-secrets
-            #       key: DEEPGRAM_API_KEY
+                { secretKeyRef: { name: dograh-secrets, key: GOOGLE_API_KEY } }
             - name: TWILIO_ACCOUNT_SID
               valueFrom:
-                secretKeyRef:
-                  name: dograh-secrets
-                  key: TWILIO_ACCOUNT_SID
+                {
+                  secretKeyRef:
+                    { name: dograh-secrets, key: TWILIO_ACCOUNT_SID },
+                }
             - name: TWILIO_AUTH_TOKEN
               valueFrom:
-                secretKeyRef:
-                  name: dograh-secrets
-                  key: TWILIO_AUTH_TOKEN
+                {
+                  secretKeyRef:
+                    { name: dograh-secrets, key: TWILIO_AUTH_TOKEN },
+                }
+          ports:
+            - containerPort: 8000
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: dograh
+  name: dograh-api
   namespace: default
 spec:
   ports:
-    - port: 80
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: dograh-api
+---
+# UI Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dograh-ui
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dograh-ui
+  template:
+    metadata:
+      labels:
+        app: dograh-ui
+    spec:
+      containers:
+        - name: ui
+          image: ghcr.io/dograh-hq/dograh-ui:latest #
+          imagePullPolicy: Always
+          env:
+            # Internal cluster URL for Server-Side Rendering
+            - name: BACKEND_URL
+              value: "http://dograh-api:8000"
+            - name: NODE_ENV
+              value: "oss"
+          ports:
+            - containerPort: 3010
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dograh-ui
+  namespace: default
+spec:
+  ports:
+    - port: 3010
       targetPort: 3010
   selector:
-    app: dograh
+    app: dograh-ui
 ---
+# Ingress
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: dograh
   namespace: default
   annotations:
-    # Matching your Traefik/Homepage setup
     kubernetes.io/ingress.class: traefik
     cert-manager.io/cluster-issuer: letsencrypt-prod
     gethomepage.dev/enabled: "true"
@@ -83,16 +130,25 @@ metadata:
     gethomepage.dev/description: "AI Voice Agent Platform"
 spec:
   rules:
-    - host: agent.rubi.home # OR agent.your-external-domain.com
+    - host: agent.rubi.home
       http:
         paths:
+          # Route API requests to the API service
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: dograh-api
+                port:
+                  number: 8000
+          # Route everything else to the UI
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: dograh
+                name: dograh-ui
                 port:
-                  number: 80
+                  number: 3010
   tls:
     - hosts:
         - agent.rubi.home
