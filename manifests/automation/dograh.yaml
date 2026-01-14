@@ -23,7 +23,7 @@ spec:
           env:
             # Connect to the DBs we just made
             - name: DATABASE_URL
-              value: "postgresql://dograh:dograh@dograh-db:5432/dograh"
+              value: "postgresql+asyncpg://dograh:dograh@dograh-db:5432/dograh"
             - name: REDIS_URL
               value: "redis://dograh-redis:6379/0"
 
