@@ -19,7 +19,13 @@ spec:
       containers:
         - name: redis
           image: redis:7 #
-          command: ["redis-server", "--requirepass", "redissecret"] # Recommended to use a secret in prod
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: REDIS_PASSWORD
+          command: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
           ports:
             - containerPort: 6379
 ---
@@ -36,7 +42,7 @@ spec:
 ---
 # Postgres
 apiVersion: apps/v1
-kind: Deployment # Switched to Deployment for simplicity, StatefulSet preferred for prod
+kind: Deployment
 metadata:
   name: dograh-db
   namespace: default
@@ -59,7 +65,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:17 #
+          image: postgres:17
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -133,7 +139,7 @@ spec:
       containers:
         - name: minio
           image: minio/minio
-          command: ["server", "/data", "--console-address", ":9001"]
+          args: ["server", "/data", "--console-address", ":9001"]
           env:
             - name: MINIO_ROOT_USER
               valueFrom:

@@ -23,10 +23,30 @@ spec:
           env:
             - name: ENVIRONMENT
               value: "local"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: POSTGRES_DB
             - name: DATABASE_URL
-              value: "postgresql+asyncpg://postgres:postgres@dograh-db:5432/postgres"
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@dograh-db:5432/$(POSTGRES_DB)"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: REDIS_PASSWORD
             - name: REDIS_URL
-              value: "redis://:redissecret@dograh-redis:6379"
+              value: "redis://:$(REDIS_PASSWORD)@dograh-redis:6379"
 
             # MinIO Config
             - name: ENABLE_AWS_S3
@@ -97,7 +117,7 @@ spec:
     spec:
       containers:
         - name: ui
-          image: ghcr.io/dograh-hq/dograh-ui:1.10.0
+          image: ghcr.io/dograh-hq/dograh-ui:latest
           imagePullPolicy: Always
           env:
             # Internal cluster URL for Server-Side Rendering
