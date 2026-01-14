@@ -47,13 +47,6 @@ metadata:
   name: dograh-db
   namespace: default
 spec:
-  initContainers:
-    - name: fix-permissions
-      image: busybox
-      command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data"]
-      volumeMounts:
-        - name: dograh-db-data
-          mountPath: /var/lib/postgresql/data
   replicas: 1
   selector:
     matchLabels:
@@ -63,6 +56,13 @@ spec:
       labels:
         app: dograh-db
     spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data"]
+          volumeMounts:
+            - name: dograh-db-data
+              mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
           image: postgres:17
@@ -82,6 +82,8 @@ spec:
                 secretKeyRef:
                   name: dograh-secrets
                   key: POSTGRES_DB
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
           volumeMounts:
             - name: dograh-db-data
               mountPath: /var/lib/postgresql/data
@@ -120,13 +122,6 @@ metadata:
   name: dograh-minio
   namespace: default
 spec:
-  initContainers:
-    - name: fix-permissions
-      image: busybox
-      command: ["sh", "-c", "chown -R 1000:1000 /data"]
-      volumeMounts:
-        - name: data
-          mountPath: /data
   replicas: 1
   selector:
     matchLabels:
@@ -136,6 +131,13 @@ spec:
       labels:
         app: dograh-minio
     spec:
+      initContainers:
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /data"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
       containers:
         - name: minio
           image: minio/minio
