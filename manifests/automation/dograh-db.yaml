@@ -68,7 +68,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dograh-db
-  namespace: automation
+  namespace: default
 spec:
   ports:
     - port: 5432
@@ -79,7 +79,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: dograh-db-pvc
-  namespace: automation
+  namespace: default
 spec:
   accessModes:
     - ReadWriteOnce

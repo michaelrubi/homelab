@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dograh
-  namespace: automation
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -59,7 +59,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dograh
-  namespace: automation
+  namespace: default
 spec:
   ports:
     - port: 80
@@ -71,7 +71,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: dograh
-  namespace: automation
+  namespace: default
   annotations:
     # Matching your Traefik/Homepage setup
     kubernetes.io/ingress.class: traefik
