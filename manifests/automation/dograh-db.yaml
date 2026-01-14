@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dograh-redis
-  namespace: automation
+  namespace: default
 spec:
   selector:
     matchLabels:
@@ -24,7 +24,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: dograh-redis
-  namespace: automation
+  namespace: default
 spec:
   ports:
     - port: 6379
@@ -36,7 +36,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dograh-db
-  namespace: automation
+  namespace: default
 spec:
   selector:
     matchLabels:
