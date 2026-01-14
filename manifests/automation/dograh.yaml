@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dograh
+  namespace: automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dograh
+  template:
+    metadata:
+      labels:
+        app: dograh
+    spec:
+      containers:
+        - name: dograh
+          image: ghcr.io/dograh-hq/dograh:latest # Verify this image path on their GitHub
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3010
+              name: http
+          env:
+            # Connect to the DBs we just made
+            - name: DATABASE_URL
+              value: "postgresql://dograh:dograh@dograh-db:5432/dograh"
+            - name: REDIS_URL
+              value: "redis://dograh-redis:6379/0"
+
+            # Link to Secrets
+            # Inside containers -> env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: GOOGLE_API_KEY
+            # - name: OPENAI_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: dograh-secrets
+            #       key: OPENAI_API_KEY
+            - name: DEEPGRAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: DEEPGRAM_API_KEY
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: TWILIO_ACCOUNT_SID
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dograh-secrets
+                  key: TWILIO_AUTH_TOKEN
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dograh
+  namespace: automation
+spec:
+  ports:
+    - port: 80
+      targetPort: 3010
+  selector:
+    app: dograh
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dograh
+  namespace: automation
+  annotations:
+    # Matching your Traefik/Homepage setup
+    kubernetes.io/ingress.class: traefik
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/name: "Dograh Voice"
+    gethomepage.dev/group: "Automation"
+    gethomepage.dev/icon: "mic.png"
+    gethomepage.dev/description: "AI Voice Agent Platform"
+spec:
+  rules:
+    - host: agent.rubi.home # OR agent.your-external-domain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dograh
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - agent.rubi.home
+      secretName: dograh-tls
