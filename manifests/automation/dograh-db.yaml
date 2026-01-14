@@ -56,6 +56,8 @@ spec:
               value: dograh # Change this or use a Secret reference!
             - name: POSTGRES_DB
               value: dograh
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: dograh-db-data
               mountPath: /var/lib/postgresql/data

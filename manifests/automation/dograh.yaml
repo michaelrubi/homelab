@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: dograh
-          image: ghcr.io/dograh-hq/dograh:latest # Verify this image path on their GitHub
+          image: dograhai/dograh:latest # Switched to Docker Hub image
           imagePullPolicy: Always
           ports:
             - containerPort: 3010
