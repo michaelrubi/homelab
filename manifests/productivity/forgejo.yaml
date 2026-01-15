@@ -76,7 +76,7 @@ spec:
               cpu: "1000m"
         # --- Forgejo ---
         - name: forgejo
-          image: codeberg.org/forgejo/forgejo:13
+          image: codeberg.org/forgejo/forgejo:14
           env:
             - name: FORGEJO__database__DB_TYPE
               value: postgres
