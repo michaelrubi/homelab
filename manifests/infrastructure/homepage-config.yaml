@@ -20,10 +20,6 @@ data:
             icon: n8n.png
             href: "{{HOMEPAGE_VAR_N8N_URL}}"
             description: "Workflow Automation"
-        - Moltbot:
-            icon: https://raw.githubusercontent.com/michaelrubi/moltbot/main/public/favicon.svg
-            href: "http://moltbot-service:18789"
-            description: "AI Agent"
     - Infrastructure:
         - pgweb:
             icon: postgresql.png
