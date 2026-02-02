@@ -24,7 +24,7 @@ spec:
 
       containers:
         - name: svelte-claw
-          image: git.rubiconetic.com/michael/svelte-claw:v0.2.2
+          image: git.rubiconetic.com/michael/svelte-claw:v0.2.4
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
