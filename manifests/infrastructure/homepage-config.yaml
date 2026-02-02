@@ -75,6 +75,9 @@ data:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"
             description: "Git Service"
+        - Svelte Claw:
+            icon: svelte-claw.png
+            href: "http://svelte-claw-service:5717
 
   widgets.yaml: |
     - resources:

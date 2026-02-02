@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svelte-claw
+  namespace: default
+  annotations:
+    # Restarts the pod if you update your encrypted secrets
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: svelte-claw
+  template:
+    metadata:
+      labels:
+        app: svelte-claw
+    spec:
+      # 1. Credentials to pull your private image from Forgejo
+      imagePullSecrets:
+        - name: forgejo-registry-secret
+
+      containers:
+        - name: svelte-claw
+          # 2. Your specific image
+          image: git.rubiconetic.com/michael/svelte-claw:v0.0.1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+
+          env:
+            # --- APPLICATION CONFIG ---
+            - name: BODY_SIZE_LIMIT
+              value: "Infinity"
+            # --- POCKETBASE CONFIG (EXTERNAL) ---
+            - name: POCKETBASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: POCKETBASE_URL
+            - name: PUBLIC_POCKETBASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: POCKETBASE_URL
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: ADMIN_EMAIL
+            # --- SECRETS (Managed via SOPS) ---
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: ADMIN_PASSWORD
+            - name: AGENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: AGENT_SECRET
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: OPENCLAW_GATEWAY_TOKEN
+            - name: OPENCLAW_IP_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: OPENCLAW_IP_ADDRESS
+            - name: ORIGIN
+              valueFrom:
+                secretKeyRef:
+                  name: svelte-claw-secrets
+                  key: ORIGIN
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svelte-claw-service
+  namespace: default
+spec:
+  # Exposes the service on your Tailscale/Internal Network IP
+  type: LoadBalancer
+  selector:
+    app: svelte-claw
+  ports:
+    - name: http
+      port: 5717
+      targetPort: 3000
+      protocol: TCP
