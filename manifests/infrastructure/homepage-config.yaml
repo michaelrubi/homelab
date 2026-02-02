@@ -77,7 +77,8 @@ data:
             description: "Git Service"
         - Svelte Claw:
             icon: svelte-claw.png
-            href: "http://svelte-claw-service:5717
+            href: "http://svelte-claw-service:5717"
+            description: "Open Claw Dashboard"
 
   widgets.yaml: |
     - resources:
