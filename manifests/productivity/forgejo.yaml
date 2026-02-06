@@ -200,7 +200,7 @@ spec:
       containers:
         # 1. The Runner Daemon
         - name: runner
-          image: codeberg.org/forgejo/runner:3.3.0
+          image: code.forgejo.org/forgejo/runner:3.3.0
           command: ["forgejo-runner", "daemon", "--config", "/config/config.yml"]
           env:
             - name: FORGEJO_INSTANCE_URL
