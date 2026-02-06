@@ -158,16 +158,12 @@ data:
       capacity: 1
       timeout: 3h
       envs:
-        # CORRECT: Validated against your 'kubectl get svc' output
         GITHUB_SERVER_URL: "http://forgejo-service.default.svc.cluster.local:3000"
     cache:
       enabled: true
       dir: /data/cache
     container:
       docker_host: tcp://localhost:2375
-      labels:
-        - "docker:docker://node:22-alpine"
-        - "ubuntu-latest:docker://node:22-alpine"
 ---
 # 6. Runner
 apiVersion: apps/v1
@@ -195,19 +191,21 @@ spec:
         # 1. The Runner Daemon
         - name: runner
           image: data.forgejo.org/forgejo/runner:11
-          command: ["forgejo-runner", "daemon", "--config", "/config/config.yml"]
+          # --- UPDATED COMMAND BLOCK ---
+          command: 
+            - "/bin/sh"
+            - "-c"
+            - |
+              forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://node:22-alpine,ubuntu-latest:docker://node:22-alpine && forgejo-runner daemon --config /config/config.yml
+          # -----------------------------
           env:
             - name: FORGEJO_INSTANCE_URL
               value: "http://forgejo-service.default.svc.cluster.local:3000"
-            
-            # --- CRITICAL FIX IS HERE ---
             - name: FORGEJO_RUNNER_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: forgejo-secrets        # <--- Changed from forgejo-runner-secret
-                  key: FORGEJO_RUNNER_TOKEN    # <--- Changed from TOKEN
-            # ----------------------------
-
+                  name: forgejo-secrets
+                  key: FORGEJO_RUNNER_TOKEN
             - name: FORGEJO_RUNNER_NAME
               value: "homelab-runner"
           volumeMounts:
