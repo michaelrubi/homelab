@@ -207,8 +207,8 @@ spec:
             - name: FORGEJO_RUNNER_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: forgejo-runner-secret
-                  key: TOKEN
+                  name: forgejo-secrets
+                  key: FORGEJO_RUNNER_TOKEN
             - name: FORGEJO_RUNNER_NAME
               value: "homelab-runner"
           volumeMounts:
