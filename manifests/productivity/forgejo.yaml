@@ -167,23 +167,32 @@ data:
 ---
 # 6. Runner
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: forgejo-runner
   namespace: default
 spec:
+  serviceName: "forgejo-runner" # Required for StatefulSet networking
   replicas: 1
   selector:
     matchLabels:
       app: forgejo-runner
+  # This automatically creates a PVC for each replica (e.g. runner-data-forgejo-runner-0)
+  volumeClaimTemplates:
+  - metadata:
+      name: runner-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "longhorn"
+      resources:
+        requests:
+          storage: 2Gi
   template:
     metadata:
       labels:
         app: forgejo-runner
     spec:
       volumes:
-        - name: runner-data
-          emptyDir: {}
         - name: config
           configMap:
             name: runner-config
@@ -191,13 +200,26 @@ spec:
         # 1. The Runner Daemon
         - name: runner
           image: data.forgejo.org/forgejo/runner:11
-          # --- UPDATED COMMAND BLOCK ---
           command: 
             - "/bin/sh"
             - "-c"
             - |
-              forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://node:22-alpine,ubuntu-latest:docker://node:22-alpine && forgejo-runner daemon --config /config/config.yml
-          # -----------------------------
+              # 1. Wait for Docker (Fixes the crash loop)
+              echo "Waiting for Docker daemon..."
+              while ! nc -z localhost 2375; do sleep 1; done
+              echo "Docker is ready!"
+
+              # 2. Smart Registration (Prevents zombie runners)
+              # The config says the file is at /data/runner
+              if [ ! -f "/data/runner" ]; then
+                echo "Registration file not found. Registering new runner..."
+                forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://node:22-alpine,ubuntu-latest:docker://node:22-alpine
+              else
+                echo "Runner already registered. Skipping registration."
+              fi
+
+              # 3. Start Daemon
+              forgejo-runner daemon --config /config/config.yml
           env:
             - name: FORGEJO_INSTANCE_URL
               value: "http://forgejo-service.default.svc.cluster.local:3000"
@@ -206,8 +228,11 @@ spec:
                 secretKeyRef:
                   name: forgejo-secrets
                   key: FORGEJO_RUNNER_TOKEN
+            # Dynamic Name: Uses the pod name (forgejo-runner-0) instead of a hardcoded string
             - name: FORGEJO_RUNNER_NAME
-              value: "homelab-runner"
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           volumeMounts:
             - name: runner-data
               mountPath: /data
