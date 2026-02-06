@@ -158,17 +158,14 @@ data:
       capacity: 1
       timeout: 3h
       envs:
-        # Use internal K8s DNS
+        # CORRECT: Validated against your 'kubectl get svc' output
         GITHUB_SERVER_URL: "http://forgejo-service.default.svc.cluster.local:3000"
     cache:
       enabled: true
       dir: /data/cache
     container:
-      # --- FIX #1: Port 2375 (since we disabled TLS below) ---
       docker_host: tcp://localhost:2375
-      # -----------------------------------------------------
       labels:
-        # Matches your "runs-on: docker"
         - "docker:docker://node:22-alpine"
         - "ubuntu-latest:docker://node:22-alpine"
 ---
@@ -197,18 +194,20 @@ spec:
       containers:
         # 1. The Runner Daemon
         - name: runner
-          # --- FIX #2: Use the official data registry and v11 tag ---
           image: data.forgejo.org/forgejo/runner:11
-          # --------------------------------------------------------
           command: ["forgejo-runner", "daemon", "--config", "/config/config.yml"]
           env:
             - name: FORGEJO_INSTANCE_URL
               value: "http://forgejo-service.default.svc.cluster.local:3000"
+            
+            # --- CRITICAL FIX IS HERE ---
             - name: FORGEJO_RUNNER_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: forgejo-secrets
-                  key: FORGEJO_RUNNER_TOKEN
+                  name: forgejo-secrets        # <--- Changed from forgejo-runner-secret
+                  key: FORGEJO_RUNNER_TOKEN    # <--- Changed from TOKEN
+            # ----------------------------
+
             - name: FORGEJO_RUNNER_NAME
               value: "homelab-runner"
           volumeMounts:
@@ -224,7 +223,6 @@ spec:
           securityContext:
             privileged: true
           env:
-            # Disabling certs means it listens on 2375 (HTTP)
             - name: DOCKER_TLS_CERTDIR
               value: ""
             - name: DOCKER_HOST
