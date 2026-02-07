@@ -75,10 +75,10 @@ data:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"
             description: "Git Service"
-        - Svelte Claw:
+        - The Grid:
             icon: svelte-claw.png
-            href: "{{HOMEPAGE_VAR_SVELTECLAW_URL}}"
-            description: "Open Claw Dashboard"
+            href: "{{HOMEPAGE_VAR_THEGRID_URL}}"
+            description: "The Grid Dashboard"
 
   widgets.yaml: |
     - resources:

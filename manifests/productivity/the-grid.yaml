@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: svelte-claw
+  name: the-grid
   namespace: default
   annotations:
     # Restarts the pod if you update your encrypted secrets
@@ -12,19 +12,19 @@ spec:
     type: RollingUpdate
   selector:
     matchLabels:
-      app: svelte-claw
+      app: the-grid
   template:
     metadata:
       labels:
-        app: svelte-claw
+        app: the-grid
     spec:
       # 1. Credentials to pull your private image from Forgejo
       imagePullSecrets:
         - name: forgejo-registry-secret
 
       containers:
-        - name: svelte-claw
-          image: git.rubiconetic.com/michael/svelte-claw:v0.9.0
+        - name: the-grid
+          image: git.rubiconetic.com/rubiconetic/the-grid:v0.1.0
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -38,42 +38,32 @@ spec:
             - name: POCKETBASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
+                  name: the-grid-secrets
                   key: POCKETBASE_URL
             - name: PUBLIC_POCKETBASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
+                  name: the-grid-secrets
                   key: PUBLIC_POCKETBASE_URL
             - name: ADMIN_EMAIL
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
+                  name: the-grid-secrets
                   key: ADMIN_EMAIL
             - name: ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
+                  name: the-grid-secrets
                   key: ADMIN_PASSWORD
-            - name: AGENT_SECRET
+            - name: SVELTE_CLAW_URL
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
-                  key: AGENT_SECRET
-            - name: OPENCLAW_GATEWAY_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: svelte-claw-secrets
-                  key: OPENCLAW_GATEWAY_TOKEN
-            - name: OPENCLAW_IP_ADDRESS
-              valueFrom:
-                secretKeyRef:
-                  name: svelte-claw-secrets
-                  key: OPENCLAW_IP_ADDRESS
+                  name: the-grid-secrets
+                  key: SVELTE_CLAW_URL
             - name: ORIGIN
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
+                  name: the-grid-secrets
                   key: ORIGIN
 
           resources:
@@ -87,13 +77,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: svelte-claw-service
+  name: the-grid-service
   namespace: default
 spec:
   # Exposes the service on your Tailscale/Internal Network IP
   type: LoadBalancer
   selector:
-    app: svelte-claw
+    app: the-grid
   ports:
     - name: http
       port: 5717

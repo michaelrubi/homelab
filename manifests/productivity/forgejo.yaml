@@ -179,14 +179,14 @@ spec:
       app: forgejo-runner
   # This automatically creates a PVC for each replica (e.g. runner-data-forgejo-runner-0)
   volumeClaimTemplates:
-  - metadata:
-      name: runner-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      storageClassName: "longhorn"
-      resources:
-        requests:
-          storage: 2Gi
+    - metadata:
+        name: runner-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "longhorn"
+        resources:
+          requests:
+            storage: 2Gi
   template:
     metadata:
       labels:
@@ -196,11 +196,18 @@ spec:
         - name: config
           configMap:
             name: runner-config
+      initContainers:
+        - name: volume-permissions
+          image: busybox:latest
+          command: ["sh", "-c", "chown -R 1000:1000 /data"]
+          volumeMounts:
+            - name: runner-data
+              mountPath: /data
       containers:
         # 1. The Runner Daemon
         - name: runner
           image: data.forgejo.org/forgejo/runner:11
-          command: 
+          command:
             - "/bin/sh"
             - "-c"
             - |

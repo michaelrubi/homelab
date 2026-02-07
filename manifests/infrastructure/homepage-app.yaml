@@ -62,10 +62,10 @@ spec:
                 secretKeyRef:
                   name: homeassistant-secrets
                   key: HA_TOKEN
-            - name: HOMEPAGE_VAR_SVELTECLAW_URL
+            - name: HOMEPAGE_VAR_THEGRID_URL
               valueFrom:
                 secretKeyRef:
-                  name: svelte-claw-secrets
+                  name: the-grid-secrets
                   key: SVELTE_CLAW_URL
           volumeMounts:
             - name: config
