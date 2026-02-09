@@ -24,7 +24,7 @@ spec:
 
       containers:
         - name: the-grid
-          image: git.rubiconetic.com/rubiconetic/the-grid:v0.2.0
+          image: git.rubiconetic.com/rubiconetic/the-grid:v0.3.0
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
