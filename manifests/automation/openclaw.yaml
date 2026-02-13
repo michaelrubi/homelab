@@ -36,7 +36,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: openclaw-gateway
-          image: openclaw/openclaw:latest
+          image: coollabsio/openclaw:latest
           ports:
             - containerPort: 18789
           env:
@@ -47,17 +47,26 @@ spec:
                 secretKeyRef:
                   name: openclaw-secrets
                   key: OPENCLAW_GATEWAY_TOKEN
-            # The following keys are optional and commented out as placeholders
-            # - name: ANTHROPIC_API_KEY
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: openclaw-secrets
-            #       key: ANTHROPIC_API_KEY
-            # - name: OPENAI_API_KEY
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: openclaw-secrets
-            #       key: OPENAI_API_KEY
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: GROQ_API_KEY
+            - name: MOONSHOT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: MOONSHOT_API_KEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: GEMINI_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: OPENROUTER_API_KEY
           volumeMounts:
             - name: openclaw-data
               mountPath: /home/node/.openclaw

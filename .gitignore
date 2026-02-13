@@ -3,4 +3,4 @@ secrets.plain.yaml
 .aider*
 
 .plans/
-# .agent/
+.agent/
