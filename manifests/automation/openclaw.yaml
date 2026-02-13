@@ -24,6 +24,8 @@ metadata:
     app: openclaw-gateway
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: openclaw-gateway
@@ -47,7 +49,7 @@ spec:
               "18789",
               "--allow-unconfigured",
               "--bind",
-              "0.0.0.0",
+              "lan",
               "--token",
               "$(OPENCLAW_GATEWAY_TOKEN)",
             ]
@@ -101,4 +103,4 @@ spec:
     - protocol: TCP
       port: 18789
       targetPort: 18789
-  type: ClusterIP
+  type: LoadBalancer

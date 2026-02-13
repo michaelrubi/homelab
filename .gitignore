@@ -3,4 +3,5 @@ secrets.plain.yaml
 .aider*
 
 .plans/
+.walkthroughs/
 .agent/
