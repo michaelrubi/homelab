@@ -14,6 +14,20 @@ spec:
   resources:
     requests:
       storage: 5Gi
+  storageClassName: longhorn
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openclaw-config
+  namespace: openclaw
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: longhorn
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -85,11 +99,16 @@ spec:
                   key: OPENROUTER_API_KEY
           volumeMounts:
             - name: openclaw-data
+              mountPath: /data
+            - name: openclaw-config
               mountPath: /home/node/.openclaw
       volumes:
         - name: openclaw-data
           persistentVolumeClaim:
             claimName: openclaw-data
+        - name: openclaw-config
+          persistentVolumeClaim:
+            claimName: openclaw-config
 ---
 apiVersion: v1
 kind: Service
