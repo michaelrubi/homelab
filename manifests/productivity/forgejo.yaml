@@ -192,6 +192,7 @@ spec:
       labels:
         app: forgejo-runner
     spec:
+      nodeName: thinkcentre01
       volumes:
         - name: config
           configMap:
