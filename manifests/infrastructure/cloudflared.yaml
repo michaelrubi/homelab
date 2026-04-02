@@ -1,25 +1,3 @@
-# Cloudflared Ingress ConfigMap
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cloudflared-ingress
-  namespace: default
-data:
-  config.yaml: |
-    tunnel: 0
-    credentials-file: /etc/cloudflared/creds/credentials.json
-    protocol: http2
-    ingress:
-      - hostname: wallabag.robin-mine.ts.net
-        service: http://wallabag-service.default.svc.cluster.local:8082
-        originRequest:
-          noTLSVerify: true
-      - hostname: "*.robin-mine.ts.net"
-        service: http://localhost:8080
-        originRequest:
-          noTLSVerify: true
-      - service: http://localhost:8080
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -52,17 +30,10 @@ spec:
                 secretKeyRef:
                   name: cloudflared-secrets
                   key: TUNNEL_TOKEN
-          volumeMounts:
-            - name: cloudflared-config
-              mountPath: /etc/cloudflared/config
-              readOnly: true
           args:
             - tunnel
             - --no-autoupdate
+            - --protocol
+            - http2
             - run
-            - --config
-            - /etc/cloudflared/config/config.yaml
-      volumes:
-        - name: cloudflared-config
-          configMap:
-            name: cloudflared-ingress
+            

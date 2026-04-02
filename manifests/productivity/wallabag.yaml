@@ -50,7 +50,7 @@ spec:
         fsGroup: 33
       containers:
         - name: wallabag
-          image: wallabag/wallabag:2.6
+          image: wallabag/wallabag:2.6.14
           ports:
             - containerPort: 80
               name: http
