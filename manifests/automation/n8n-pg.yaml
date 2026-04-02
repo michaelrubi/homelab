@@ -42,13 +42,49 @@ spec:
         app: postgres
     spec:
       securityContext:
-        fsGroup: 999           
+        fsGroup: 999
+      initContainers:
+      - name: init-postgres
+        image: postgres:16
+        command:
+          - /bin/bash
+          - -c
+          - |
+            echo "Checking for wallabag user..."
+            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+              SELECT 'SELECT 1' WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'wallabag')\gexec
+              SELECT 'CREATE USER wallabag' WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'wallabag')\gexec
+              SELECT 'CREATE DATABASE wallabag' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'wallabag')\gexec
+              GRANT ALL PRIVILEGES ON DATABASE wallabag TO wallabag;
+              ALTER USER wallabag WITH PASSWORD '$WALLABAG_DB_PASSWORD';
+            EOSQL
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: n8n-db-secrets
+              key: POSTGRES_PASSWORD
+        - name: WALLABAG_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wallabag-secrets
+              key: WALLABAG_DB_PASSWORD
       containers:
       - name: postgres
         image: postgres:16
         ports:
         - containerPort: 5432
-        envFrom:               
+        envFrom:
         - secretRef:
             name: n8n-db-secrets
         volumeMounts:
