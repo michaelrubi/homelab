@@ -11,7 +11,7 @@ data:
     protocol: http2
     ingress:
       - hostname: wallabag.robin-mine.ts.net
-        service: http://wallabag-service.default.svc.cluster.local:8080
+        service: http://wallabag-service.default.svc.cluster.local:8082
         originRequest:
           noTLSVerify: true
       - hostname: "*.robin-mine.ts.net"
