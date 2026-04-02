@@ -109,9 +109,9 @@ spec:
             # Mailer Configuration (optional, can be configured later)
             - name: SYMFONY__ENV__MAILER_DSN
               value: "smtp://localhost"
-            # Redis for caching (optional)
-            - name: SYMFONY__ENV__REDIS_DSN
-              value: "redis://localhost:6379"
+            # Redis for caching (optional) - REMOVED: Redis not currently deployed
+            # - name: SYMFONY__ENV__REDIS_DSN
+            #   value: "redis://localhost:6379"
           volumeMounts:
             - name: wallabag-images
               mountPath: /var/www/wallabag/web/assets/images

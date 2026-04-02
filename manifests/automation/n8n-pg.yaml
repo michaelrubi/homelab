@@ -43,16 +43,46 @@ spec:
     spec:
       securityContext:
         fsGroup: 999
-      initContainers:
+      containers:
+      - name: postgres
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: n8n-db-secrets
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+          subPath: data
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+---
+# 4. Database Initialization Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init-wallabag-db
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
       - name: init-postgres
         image: postgres:16
         command:
           - /bin/bash
           - -c
           - |
-            echo "Checking for wallabag user..."
-            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-              SELECT 'SELECT 1' WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'wallabag')\gexec
+            echo "Waiting for PostgreSQL to accept connections..."
+            until pg_isready -h postgres -p 5432 -U "$POSTGRES_USER"; do
+              sleep 2
+            done
+            echo "PostgreSQL is ready. Provisioning wallabag..."
+            psql -h postgres -p 5432 -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
               SELECT 'CREATE USER wallabag' WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'wallabag')\gexec
               SELECT 'CREATE DATABASE wallabag' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'wallabag')\gexec
               GRANT ALL PRIVILEGES ON DATABASE wallabag TO wallabag;
@@ -79,19 +109,3 @@ spec:
             secretKeyRef:
               name: wallabag-secrets
               key: WALLABAG_DB_PASSWORD
-      containers:
-      - name: postgres
-        image: postgres:16
-        ports:
-        - containerPort: 5432
-        envFrom:
-        - secretRef:
-            name: n8n-db-secrets
-        volumeMounts:
-        - name: postgres-data
-          mountPath: /var/lib/postgresql/data
-          subPath: data
-      volumes:
-      - name: postgres-data
-        persistentVolumeClaim:
-          claimName: postgres-pvc
