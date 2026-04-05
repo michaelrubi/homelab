@@ -71,10 +71,6 @@ data:
               key: "{{HOMEPAGE_VAR_HA_TOKEN}}"
               
     - Productivity:
-        - Wallabag:
-            icon: wallabag.png
-            href: "https://wallabag.robin-mine.ts.net"
-            description: "Read-it-Later App"
         - Forgejo:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"

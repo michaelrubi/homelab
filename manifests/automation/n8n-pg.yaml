@@ -99,7 +99,7 @@ spec:
             secretKeyRef:
               name: n8n-db-secrets
               key: POSTGRES_DB
-        - name: POSTGRES_PASSWORD
+        - name: PGPASSWORD
           valueFrom:
             secretKeyRef:
               name: n8n-db-secrets
