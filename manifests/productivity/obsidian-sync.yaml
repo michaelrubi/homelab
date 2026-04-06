@@ -16,6 +16,7 @@ data:
     [chttpd]
     enable_cors = true
     require_valid_user = true
+    max_http_request_size = 4294967296
 
     [chttpd_auth]
     require_valid_user = true
@@ -27,7 +28,7 @@ data:
     # app://obsidian.md is for Desktop
     # capacitor://localhost is for Mobile
     # http://localhost is for local testing
-    origins = app://obsidian.md, capacitor://localhost, http://localhost
+    origins = app://obsidian.md,capacitor://localhost,http://localhost
 ---
 # Persistent Storage
 apiVersion: v1
