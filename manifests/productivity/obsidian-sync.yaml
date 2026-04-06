@@ -8,6 +8,10 @@ data:
   10-obsidian-cors.ini: |
     [httpd]
     enable_cors = true
+    WWW-Authenticate = Basic realm="administrator"
+
+    [couchdb]
+    max_document_size = 4294967296
 
     [chttpd]
     enable_cors = true
