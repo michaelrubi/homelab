@@ -59,7 +59,3 @@ spec:
     - name: ghcr-auth
       secret:
         secretName: ghcr-rubiconetic
-  tolerations:
-    - key: "node-role.kubernetes.io/control-plane"
-      effect: "NoSchedule"
-      operator: "Exists"
