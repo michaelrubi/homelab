@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ghcr-rubiconetic
+  namespace: default
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: REPLACE_WITH_BASE64_CONFIG
+---
+# Kubernetes Job to build relay image using kaniko
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-relay-build
+  namespace: default
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: kaniko-relay-build
+    spec:
+      restartPolicy: Never
+      nodeName: thinkcentre01
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          effect: "NoSchedule"
+          operator: "Exists"
+      initContainers:
+        - name: git-clone
+          image: alpine/git:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              git clone https://git.rubiconetic.com/rubiconetic/Hermes-Mobile.git /workspace
+              cd /workspace
+              git checkout main
+          env:
+            - name: GIT_TERMINAL_PROMPT
+              value: "0"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.23.2-debug
+          imagePullPolicy: Always
+          command: ["/kaniko/executor"]
+          args:
+            - --dockerfile=/workspace/relay/Dockerfile
+            - --context=/workspace
+            - --destination=ghcr.io/rubiconetic/hermes-mobile/relay:latest
+            - --cache=true
+            - --cache-run-layers=true
+            - --snapshot-mode=redo
+          env:
+            - name: HOME
+              value: /root
+            - name: REGISTRY_USERNAME
+              value: michael
+            - name: REGISTRY_PASSWORD
+              value: GITHUB_TOKEN_HERE
+            - name: REGISTRY_AUTH
+              value: "true"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: workspace
+          emptyDir: {}

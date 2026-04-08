@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: relay-builder
+  namespace: default
+spec:
+  restartPolicy: Never
+  containers:
+    - name: builder
+      image: docker:dind
+      imagePullPolicy: IfNotPresent
+      command:
+        - sh
+        - -c
+        - |
+          dockerd &
+          sleep 5
+          docker buildx create --name kaniko-buildx --driver docker-container 2>/dev/null || true
+          docker buildx use kaniko-buildx
+          docker login ghcr.io -u michael --password-stdin <<< $(cat /etc/ghcr-pass/token)
+          docker buildx build --push -f /src/relay/Dockerfile -t ghcr.io/rubiconetic/hermes-mobile/relay:latest /src
+      env:
+        - name: HOME
+          value: /home/builder
+      volumeMounts:
+        - name: src
+          mountPath: /src
+        - name: ghcr-auth
+          mountPath: /etc/ghcr-pass
+      securityContext:
+        privileged: true
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "1000m"
+  volumes:
+    - name: src
+      emptyDir: {}
+    - name: ghcr-auth
+      secret:
+        secretName: forgejo-registry-secret
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      effect: "NoSchedule"
+      operator: "Exists"
+  nodeName: thinkcentre01
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: relay-builder-svc
+  namespace: default
+spec:
+  clusterIP: None
+  selector:
+    app: relay-builder

@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: relay-build
+  namespace: default
+  generateName: relay-build-
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: 300
+  nodeName: thinkcentre01
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      effect: "NoSchedule"
+      operator: "Exists"
+  containers:
+    - name: builder
+      image: docker:dind
+      imagePullPolicy: IfNotPresent
+      command: ["sh", "-c"]
+      args:
+        - |
+          dockerd &
+
+          echo 'Waiting for dockerd...'
+          for i in $(seq 1 30); do
+            docker info >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+          # Login to ghcr.io using the token from the forgejo registry secret
+          TOKEN=$(cat /etc/ghcr-token/token)
+          echo "$TOKEN" | docker login ghcr.io -u michael --password-stdin
+
+          # Build the relay image
+          docker buildx create --name buildx-builder --driver docker-container 2>/dev/null || true
+          docker buildx use buildx-builder
+          docker buildx build --load -f /src/relay/Dockerfile -t ghcr.io/rubiconetic/hermes-mobile/relay:latest /src
+      env:
+        - name: HOME
+          value: /root
+      volumeMounts:
+        - name: src
+          mountPath: /src
+        - name: ghcr-auth
+          mountPath: /etc/ghcr-token
+          readOnly: true
+      securityContext:
+        privileged: true
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "500m"
+        limits:
+          memory: "1Gi"
+          cpu: "1000m"
+  volumes:
+    - name: src
+      emptyDir: {}
+    - name: ghcr-auth
+      secret:
+        secretName: ghcr-rubiconetic
+  tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      effect: "NoSchedule"
+      operator: "Exists"
