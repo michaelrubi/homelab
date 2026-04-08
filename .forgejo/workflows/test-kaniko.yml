@@ -9,12 +9,6 @@ on:
 jobs:
   build:
     runs-on: kaniko
-    container:
-      image: gcr.io/kaniko-project/executor:debug
-      args:
-        - --context=dir:///workspace
-        - --destination=forgejo-service.default.svc.cluster.local:3000/homelab/test:kaniko
-        - --dockerfile=Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,9 +26,7 @@ jobs:
           /kaniko/executor \
             --context=dir:///workspace \
             --dockerfile=Dockerfile \
-            --destination=$IMAGE_TAG
-        env:
-          IMAGE_TAG: forgejo-service.default.svc.cluster.local:3000/homelab/test:kaniko
+            --destination=forgejo-service.default.svc.cluster.local:3000/homelab/test:kaniko
 
   verify-build:
     runs-on: ubuntu-latest
