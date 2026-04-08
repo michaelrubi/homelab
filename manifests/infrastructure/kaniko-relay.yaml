@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kaniko-relay
+  namespace: default
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: kaniko-relay
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kaniko
+          image: ghcr.io/kaniko-project/executor:v1.23.2-debug
+          imagePullPolicy: Always
+          args:
+            - --dockerfile=/workspace/relay/Dockerfile
+            - --context=/workspace
+            - --destination=ghcr.io/rubiconetic/hermes-mobile/relay:latest
+            - --cache=true
+            - --cache-run-layers=true
+            - --snapshot-mode=redo
+          env:
+            - name: HOME
+              value: /home/kaniko
+            - name: REGISTRY_USERNAME
+              value: michael
+          volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker/
+            - name: workspace
+              mountPath: /workspace
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: forgejo-registry-secret
+        - name: workspace
+          emptyDir: {}
+      initContainers:
+        - name: git-clone
+          image: alpine/git:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+          args:
+            - git clone https://git.rubiconetic.com/rubiconetic/Hermes-Mobile.git /workspace && cd /workspace && git checkout main
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+          env:
+            - name: GIT_TERMINAL_PROMPT
+              value: "0"
