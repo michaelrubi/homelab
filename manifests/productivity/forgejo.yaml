@@ -100,6 +100,8 @@ spec:
               value: "true" # Assume configured after first run or we rely on auto-setup
             # Admin setup can be done via CLI or initial web UI.
             # We skip auto-admin creation to avoid complex secret handling unless requested.
+            - name: FORGEJO__actions__ENABLED
+              value: "true"
           volumeMounts:
             - name: data
               mountPath: /data
