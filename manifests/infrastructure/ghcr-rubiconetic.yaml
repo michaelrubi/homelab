@@ -1,0 +1,27 @@
+apiVersion: v1
+data:
+    .dockerconfigjson: ENC[AES256_GCM,data:xho10Z6TzupCW4dwBLDg1G8oMgjIvYIzMH1m0QQ/h3nJTO07r4LSnpUeQdoxQcYI54FgOiIsA3d9Ihskook1Qs10gk9NH4IN+5Rvzkg+NN3I5/jM7gG50AN4Bo+alSNmT28XSDm2s1QeXwDphwSYUUl2vvaAR40t+3Y3M9Xzz4GOIJk32tihSty/qh/MQ8HKutzG8NRgjTyH4xQId5ZFWSB0cAkQTHKoeDXY3ovUyU8hZwPaB9mvhqOv9XrGk9AmcQqueygMR3AqavHiZmkrrX0RO8hRm9pjHU8P4ToqfGSJ8GOdy759kA==,iv:F5wPT4wEvIeiC39CGZ5GOtGZE3q6uah5r43dE20c6f4=,tag:h5UcRtRTsIujJb/uu4bhTQ==,type:str]
+kind: Secret
+metadata:
+    name: ghcr-rubiconetic
+type: kubernetes.io/dockerconfigjson
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1qf4h0dz5mjzx75vj4dl9ak6uvuq8ucujhsnc52scdrxp400lu4jqajyxmj
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBOYlBhbVF5amsrZlVCREVs
+            bXAwT1hPcHpHY0pmWVVEMmJYNGRjZ29UT1hFCkVkSUR4RDRJZ0F6YlVtVDNmOXN3
+            OFhsajZaL2Q4dWw1WXB6a280MFVXUFkKLS0tIDJubjdQR2YvUUNRWmovK1NnM3Mw
+            ZFQxUUtxVmxEZmlMUVArYjZTNCtUY2sK0kAXsu0/3MRpCpey706WP4Y66DTu6p0d
+            PS8nFJF9IPvPqScraw7zSMuwHPO+vc0ZLy4r11k0JJnNDN+z4BGDLA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-04-08T18:06:11Z"
+    mac: ENC[AES256_GCM,data:bW21NExF5q0NQjjBGt98+dD5UHorzqfjGC36rYoSpjpMPwE5iCa2hSixx9yynBogm4L8lJaqPJTSm9zSaJ/8ZXARrBTxkx0JbUvPb+1PRaP/SI5Igsur5g1nxc0LASLRhfoHwVhb3t2209wtFKCmQ4Ya/TNeJkeEf4jE7PUfo70=,iv:P8oRP9s4P7Y7RLSBnfMUiysbKSucTdrzXnGSaZS0bo4=,tag:JRqibdMPrs0T/0dWwgWCQg==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.0
