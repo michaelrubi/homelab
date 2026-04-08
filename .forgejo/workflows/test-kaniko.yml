@@ -1,0 +1,46 @@
+name: test-kaniko
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - forgejo
+
+jobs:
+  build:
+    runs-on: kaniko
+    container:
+      image: gcr.io/kaniko-project/executor:debug
+      args:
+        - --context=dir:///workspace
+        - --destination=forgejo-service.default.svc.cluster.local:3000/homelab/test:kaniko
+        - --dockerfile=Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Dockerfile for test
+        run: |
+          cat > Dockerfile << 'EOF'
+          FROM alpine:latest
+          RUN echo "Kaniko test build $(date)" > /tmp/test.txt
+          CMD cat /tmp/test.txt
+          EOF
+
+      - name: Build with Kaniko
+        run: |
+          /kaniko/executor \
+            --context=dir:///workspace \
+            --dockerfile=Dockerfile \
+            --destination=$IMAGE_TAG
+        env:
+          IMAGE_TAG: forgejo-service.default.svc.cluster.local:3000/homelab/test:kaniko
+
+  verify-build:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Verify build completed
+        run: |
+          echo "Build job completed successfully"
+          echo "Image should be available at: forgejo-service.default.svc.cluster.local:3000/homelab/test:kaniko"

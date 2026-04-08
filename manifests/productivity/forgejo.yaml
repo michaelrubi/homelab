@@ -221,7 +221,7 @@ spec:
               # The config says the file is at /data/runner
               if [ ! -f "/data/runner" ]; then
                 echo "Registration file not found. Registering new runner..."
-                forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://node:22-alpine,ubuntu-latest:docker://node:22-alpine
+                forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://node:22-alpine,ubuntu-latest:docker://node:22-alpine,kaniko:docker://gcr.io/kaniko-project/executor:debug
               else
                 echo "Runner already registered. Skipping registration."
               fi
