@@ -1,5 +1,6 @@
 secrets.yaml
 secrets.plain.yaml
+*.plain.yaml
 .aider*
 
 .plans/
