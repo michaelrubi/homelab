@@ -19,6 +19,6 @@ resources:
 - media/jackett.yaml
 - media/torrenter.yaml
 - productivity/forgejo.yaml
-- manifests/secrets/secrets.sops.yaml
+- secrets/secrets.sops.yaml
 - productivity/obsidian-sync.yaml
 - productivity/the-grid.yaml
