@@ -48,6 +48,7 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+      nodeName: thinkcentre01
       containers:
         # --- Postgres ---
         - name: postgres
@@ -76,7 +77,7 @@ spec:
               cpu: "1000m"
         # --- Forgejo ---
         - name: forgejo
-          image: codeberg.org/forgejo/forgejo:14
+          image: codeberg.org/forgejo/forgejo:15
           env:
             - name: FORGEJO__database__DB_TYPE
               value: postgres
@@ -206,6 +207,7 @@ spec:
           volumeMounts:
             - name: runner-data
               mountPath: /data
+      nodeName: thinkcentre01
       containers:
         # 1. The Runner Daemon
         - name: runner
