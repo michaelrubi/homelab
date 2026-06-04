@@ -37,13 +37,31 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
         runAsGroup: 1000
+      
+      # --- ADDED: Scaffolds the missing package.json before n8n boots ---
+      initContainers:
+      - name: init-n8n-nodes
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          mkdir -p /home/node/.n8n/nodes
+          if [ ! -f /home/node/.n8n/nodes/package.json ]; then
+            echo '{}' > /home/node/.n8n/nodes/package.json
+          fi
+          chown -R 1000:1000 /home/node/.n8n
+        volumeMounts:
+        - name: n8n-data
+          mountPath: /home/node/.n8n
+
       containers:
       - name: n8n
         image: docker.n8n.io/n8nio/n8n:2.25.2
         ports:
         - containerPort: 5678
-        # --- HARDENING ---
-        esources:
+        # --- FIXED TYPO: Changed 'esources' to 'resources' ---
+        resources:
           requests:
             memory: "256Mi"
             cpu: "100m"

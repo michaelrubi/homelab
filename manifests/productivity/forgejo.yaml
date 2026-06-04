@@ -49,6 +49,20 @@ spec:
       securityContext:
         fsGroup: 1000
       nodeName: thinkcentre01
+      
+      # --- ADDED: Fix permissions for Longhorn blank volume ---
+      initContainers:
+        - name: init-forgejo-data
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 1000:1000 /data
+          volumeMounts:
+            - name: data
+              mountPath: /data
+
       containers:
         # --- Postgres ---
         - name: postgres
