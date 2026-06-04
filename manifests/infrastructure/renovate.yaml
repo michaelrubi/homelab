@@ -24,9 +24,15 @@ spec:
                 - name: RENOVATE_ENDPOINT
                   value: "http://forgejo-service.default.svc.cluster.local:3000/api/v1"
 
-                # Scan all repos this bot has access to
+                # Explicit repo list — replaces autodiscover.
+                # Excluded:
+                #   michael/midday       — bun manager OOMs at 2 Gi
+                #   michael/michael-rubi — default branch is 'master', autodiscover assumed 'main'
+                # Extend this list to add more repos.
                 - name: RENOVATE_AUTODISCOVER
-                  value: "true"
+                  value: "false"
+                - name: RENOVATE_REPOS
+                  value: '["michael/homelab"]'
 
                 # The Identity used for commits
                 - name: RENOVATE_GIT_AUTHOR
@@ -52,5 +58,6 @@ spec:
                   memory: "512Mi"
                   cpu: "200m"
                 limits:
-                  memory: "2Gi"
+                  memory: "4Gi"
+                  cpu: "2000m"
           restartPolicy: Never
