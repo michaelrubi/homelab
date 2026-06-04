@@ -221,7 +221,6 @@ spec:
           volumeMounts:
             - name: runner-data
               mountPath: /data
-      nodeName: thinkcentre01
       containers:
         # 1. The Runner Daemon
         - name: runner
