@@ -46,14 +46,24 @@ spec:
         - sh
         - -c
         - |
+          set -eu
           mkdir -p /home/node/.n8n/nodes
           if [ ! -f /home/node/.n8n/nodes/package.json ]; then
             echo '{}' > /home/node/.n8n/nodes/package.json
           fi
-          chown -R 1000:1000 /home/node/.n8n
+          # Init runs as root (securityContext override below).
+          # chown may no-op on Longhorn if fsGroup already grants access;
+          # the `|| true` makes that non-fatal.
+          chown -R 1000:1000 /home/node/.n8n || true
         volumeMounts:
         - name: n8n-data
           mountPath: /home/node/.n8n
+        securityContext:
+          # Override pod-level runAsUser/runAsGroup so chown can succeed
+          # against a Longhorn volume that was created as root.
+          # The n8n runtime container still runs as UID 1000.
+          runAsUser: 0
+          runAsGroup: 0
 
       containers:
       - name: n8n
