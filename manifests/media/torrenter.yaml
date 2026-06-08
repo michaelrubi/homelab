@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: torrenter-deployment
+  name: torrenter
   namespace: default
   annotations:
     reloader.stakater.com/auto: "true"
@@ -72,7 +72,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: torrenter-service
+  name: torrenter
   namespace: default
 spec:
   type: LoadBalancer
