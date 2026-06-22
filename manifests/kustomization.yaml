@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - automation/n8n-pg.yaml
+- automation/n8n-service.yaml
 - automation/n8n.yaml
 - infrastructure/cloudflared.yaml
 - infrastructure/homepage-app.yaml
