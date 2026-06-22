@@ -8,11 +8,13 @@ resources:
 - infrastructure/homepage-config.yaml
 - infrastructure/homepage-rbac.yaml
 - infrastructure/kaniko-relay.yaml
+- infrastructure/longhorn-backup-target.yaml
+- infrastructure/longhorn-recurring-job.yaml
 - infrastructure/longhorn-monitor.yaml
 - infrastructure/longhorn.yaml
 - infrastructure/monitoring.yaml
 - infrastructure/pgweb.yaml
-- infrastructure/relay.yaml
+- infrastructure/postgres-dump.yaml
 - infrastructure/reloader.yaml
 - infrastructure/renovate.yaml
 - infrastructure/vaultwarden.yaml

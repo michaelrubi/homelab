@@ -10,7 +10,7 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 1Gi
+      storage: 5Gi
 ---
 # 2. The n8n Deployment
 apiVersion: apps/v1
@@ -37,31 +37,46 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
         runAsGroup: 1000
-      
-      # --- ADDED: Scaffolds the missing package.json before n8n boots ---
+
+      # --- Durable custom-node installer ---
+      # Replaces the previous busybox no-op. Runs `npm install` against a
+      # hardcoded list of community node packages so they survive PVC wipes
+      # and pod restarts. Uses --ignore-scripts/--no-optional to skip native
+      # builds (e.g. isolated-vm) that fail in this minimal image.
       initContainers:
       - name: init-n8n-nodes
-        image: busybox:1.36
+        image: node:20-alpine
         command:
         - sh
         - -c
         - |
           set -eu
           mkdir -p /home/node/.n8n/nodes
-          if [ ! -f /home/node/.n8n/nodes/package.json ]; then
-            echo '{}' > /home/node/.n8n/nodes/package.json
-          fi
-          # Init runs as root (securityContext override below).
-          # chown may no-op on Longhorn if fsGroup already grants access;
-          # the `|| true` makes that non-fatal.
+          cd /home/node/.n8n/nodes
+          cat > package.json <<'PKGJSON'
+          {
+            "name": "n8n-custom-nodes",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "n8n-nodes-minimax-chat": "*",
+              "@kenkaiii/n8n-nodes-supercode": "*",
+              "n8n-nodes-forgejo": "*",
+              "@mendable/n8n-nodes-firecrawl": "*",
+              "n8n-nodes-webcrawlerapi": "*",
+              "n8n-nodes-scoro": "*"
+            }
+          }
+          PKGJSON
+          echo 'Installing custom nodes (skipping native build / optional deps)...'
+          npm install --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund --loglevel=error
           chown -R 1000:1000 /home/node/.n8n || true
+          echo 'Installed node_modules:'
+          ls /home/node/.n8n/nodes/node_modules 2>&1 | head -30
         volumeMounts:
         - name: n8n-data
           mountPath: /home/node/.n8n
         securityContext:
-          # Override pod-level runAsUser/runAsGroup so chown can succeed
-          # against a Longhorn volume that was created as root.
-          # The n8n runtime container still runs as UID 1000.
           runAsUser: 0
           runAsGroup: 0
 
@@ -70,7 +85,6 @@ spec:
         image: docker.n8n.io/n8nio/n8n:2.25.2
         ports:
         - containerPort: 5678
-        # --- FIXED TYPO: Changed 'esources' to 'resources' ---
         resources:
           requests:
             memory: "256Mi"
@@ -89,11 +103,9 @@ spec:
             path: /healthz
             port: 5678
           initialDelaySeconds: 5
-        # --- STORAGE CONFIG ---
         volumeMounts:
         - name: n8n-data
           mountPath: /home/node/.n8n
-        # --- ENV VARIABLES ---
         env:
         - name: GENERIC_TIMEZONE
           value: "America/Phoenix"
@@ -101,13 +113,11 @@ spec:
           value: "America/Phoenix"
         - name: N8N_SECURE_COOKIE
           value: "false"
-        # ENCRYPTION KEY
         - name: N8N_ENCRYPTION_KEY
           valueFrom:
             secretKeyRef:
               name: n8n-secrets
               key: N8N_ENCRYPTION_KEY
-        # --- URL CONFIG ---
         - name: WEBHOOK_URL
           valueFrom:
             secretKeyRef:
@@ -118,11 +128,10 @@ spec:
             secretKeyRef:
               name: n8n-secrets
               key: N8N_URL
-        # --- DATABASE CONFIG ---
         - name: DB_TYPE
-          value: "postgresdb"
+          value: postgresdb
         - name: DB_POSTGRESDB_HOST
-          value: "postgres"
+          value: postgres
         - name: DB_POSTGRESDB_PORT
           value: "5432"
         - name: DB_POSTGRESDB_USER
@@ -144,17 +153,3 @@ spec:
       - name: n8n-data
         persistentVolumeClaim:
           claimName: n8n-pvc
----
-# 3. The Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: n8n-service
-  namespace: default
-spec:
-  type: LoadBalancer
-  selector:
-    app: n8n
-  ports:
-    - port: 5678
-      targetPort: 5678

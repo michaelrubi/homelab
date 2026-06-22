@@ -1,0 +1,23 @@
+# Daily Longhorn backup of all volumes to the NFS share on thinkcentre02.
+# Keep 7 daily snapshots per volume on the backup target. With incremental
+# backups and lz4 compression (Longhorn defaults), expect ~5-15GB total
+# across all volumes per day. Monitor disk usage on thinkcentre02
+# (/var/lib/longhorn-backups lives on the same disk as Longhorn's data).
+#
+# Volumes get auto-labeled `recurring-job.longhorn.io/group=default` by
+# Longhorn when this job is the only one with that group name, so no
+# manual labeling is required.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: daily-backup-to-nfs
+  namespace: longhorn-system
+spec:
+  cron: "0 3 * * *"
+  task: backup
+  groups:
+    - default
+  retain: 7
+  concurrency: 1
+  labels:
+    recurring-job.longhorn.io/group: default
