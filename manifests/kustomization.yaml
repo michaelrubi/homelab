@@ -25,3 +25,7 @@ resources:
 - secrets/secrets.sops.yaml
 - productivity/obsidian-sync.yaml
 - productivity/the-grid.yaml
+- social/postiz-app.yaml
+- social/postiz-postgres.yaml
+- social/postiz-redis.yaml
+- social/postiz-temporal.yaml

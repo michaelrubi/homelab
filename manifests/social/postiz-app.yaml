@@ -1,0 +1,125 @@
+# Postiz monolith — single pod running nginx + 3 Node processes via pm2:
+#   - backend (NestJS API, port 3000)
+#   - frontend (NextJS, port 4200)
+#   - orchestrator (NestJS Temporal worker, healthcheck on 3002)
+# Nginx on :5000 inside the container fronts all three (see upstream image).
+#
+# Two durable volumes:
+#   /uploads  — user-uploaded media (avatars, post media)
+#   /config   — Prisma client output, JWT signing material, app state
+#
+# Resources sized for 3 Node processes (backend + frontend + orchestrator
+# all in one pod). Recreate strategy because of /config + /uploads mounts.
+# Reloader annotation restarts the pod when postiz-secrets changes.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postiz-uploads-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postiz-config-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postiz-service
+  namespace: default
+spec:
+  # Tailscale LoadBalancer — only reachable from your tailnet.
+  # Cloudflared tunnel routes postiz.rubiconetic.com → this Service:5000.
+  type: LoadBalancer
+  selector:
+    app: postiz
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz
+  namespace: default
+  annotations:
+    # Restarts the pod if you update postiz-secrets
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postiz
+  template:
+    metadata:
+      labels:
+        app: postiz
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: postiz
+          image: ghcr.io/gitroomhq/postiz-app:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: postiz-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          livenessProbe:
+            # nginx on :5000 is the public surface — probe that.
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: uploads
+              mountPath: /uploads
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: postiz-uploads-pvc
+        - name: config
+          persistentVolumeClaim:
+            claimName: postiz-config-pvc

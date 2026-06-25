@@ -1,0 +1,366 @@
+# Temporal workflow engine for the Postiz orchestrator process.
+#
+# Architecture (mirrors upstream docker-compose.yaml lines 200-269):
+#   postiz-temporal-postgres    — postgres:16 holds workflow history (5Gi PVC)
+#   postiz-temporal-elasticsearch — query accelerator for Temporal visibility
+#                                   (emptyDir, history lives in postgres)
+#   postiz-temporal             — temporalio/auto-setup:1.28.1 server
+#   postiz-temporal-admin-tools — debug CLI container (interactive, no Service)
+#   postiz-temporal-ui          — Temporal web UI on :8080
+#                                  (ClusterIP only — port-forward to access)
+#
+# The orchestrator process inside the postiz pod connects to
+# postiz-temporal:7233 (set via TEMPORAL_ADDRESS in postiz-secrets).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postiz-temporal-postgres-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postiz-temporal-postgres
+  namespace: default
+spec:
+  selector:
+    app: postiz-temporal-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz-temporal-postgres
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postiz-temporal-postgres
+  template:
+    metadata:
+      labels:
+        app: postiz-temporal-postgres
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: temporal-db-secrets
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "temporal", "-d", "temporal"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "temporal", "-d", "temporal"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postiz-temporal-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postiz-temporal-elasticsearch
+  namespace: default
+spec:
+  selector:
+    app: postiz-temporal-elasticsearch
+  ports:
+    - port: 9200
+      targetPort: 9200
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz-temporal-elasticsearch
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postiz-temporal-elasticsearch
+  template:
+    metadata:
+      labels:
+        app: postiz-temporal-elasticsearch
+    spec:
+      containers:
+        - name: elasticsearch
+          image: elasticsearch:7.17.27
+          ports:
+            - containerPort: 9200
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: "-Xms256m -Xmx256m"
+            # Match upstream docker-compose — refuse to start when disk is low
+            - name: cluster.routing.allocation.disk.threshold_enabled
+              value: "true"
+            - name: cluster.routing.allocation.disk.watermark.low
+              value: 512mb
+            - name: cluster.routing.allocation.disk.watermark.high
+              value: 256mb
+            - name: cluster.routing.allocation.disk.watermark.flood_stage
+              value: 128mb
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "100m"
+            limits:
+              memory: "768Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+      volumes:
+        # emptyDir — ES is a query accelerator, history lives in postgres.
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postiz-temporal
+  namespace: default
+spec:
+  selector:
+    app: postiz-temporal
+  ports:
+    - port: 7233
+      targetPort: 7233
+      name: grpc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz-temporal
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postiz-temporal
+  template:
+    metadata:
+      labels:
+        app: postiz-temporal
+    spec:
+      initContainers:
+        # Wait for postgres + elasticsearch to be ready before starting the
+        # temporal server, otherwise it fails its initial schema setup.
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postiz-temporal-postgres -U temporal -d temporal; do
+                echo "waiting for temporal postgres..."; sleep 2;
+              done
+        - name: wait-for-elasticsearch
+          image: curlimages/curl:8.10.1
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf http://postiz-temporal-elasticsearch:9200/_cluster/health; do
+                echo "waiting for temporal elasticsearch..."; sleep 2;
+              done
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.28.1
+          ports:
+            - containerPort: 7233
+          env:
+            - name: DB
+              value: postgres12
+            - name: DB_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: temporal-db-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: temporal-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_SEEDS
+              value: postiz-temporal-postgres
+            - name: DYNAMIC_CONFIG_FILE_PATH
+              value: config/dynamicconfig/development-sql.yaml
+            - name: ENABLE_ES
+              value: "true"
+            - name: ES_SEEDS
+              value: postiz-temporal-elasticsearch
+            - name: ES_VERSION
+              value: v7
+            - name: TEMPORAL_NAMESPACE
+              value: default
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: 7233
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+# Temporal admin tools — interactive CLI for debugging workflows.
+# No Service; attach via `kubectl exec -it ... -- tctl ...` when needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz-temporal-admin-tools
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postiz-temporal-admin-tools
+  template:
+    metadata:
+      labels:
+        app: postiz-temporal-admin-tools
+    spec:
+      containers:
+        - name: admin-tools
+          image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
+          stdin: true
+          tty: true
+          command: ["sleep", "infinity"]
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: postiz-temporal:7233
+            - name: TEMPORAL_CLI_ADDRESS
+              value: postiz-temporal:7233
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+---
+# Temporal web UI on :8080. ClusterIP only — port-forward to access:
+#   kubectl port-forward svc/postiz-temporal-ui 8080:8080
+apiVersion: v1
+kind: Service
+metadata:
+  name: postiz-temporal-ui
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: postiz-temporal-ui
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz-temporal-ui
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postiz-temporal-ui
+  template:
+    metadata:
+      labels:
+        app: postiz-temporal-ui
+    spec:
+      containers:
+        - name: ui
+          image: temporalio/ui:2.34.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: postiz-temporal:7233
+            - name: TEMPORAL_CORS_ORIGINS
+              value: http://localhost:3000
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
