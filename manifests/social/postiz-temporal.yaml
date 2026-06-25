@@ -12,6 +12,42 @@
 # The orchestrator process inside the postiz pod connects to
 # postiz-temporal:7233 (set via TEMPORAL_ADDRESS in postiz-secrets).
 ---
+# development-sql.yaml — Temporal's stock dynamic config for sql-backed dev.
+# Sourced from https://github.com/temporalio/temporal/blob/main/config/dynamicconfig/development-sql.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postiz-temporal-dynamicconfig
+  namespace: default
+data:
+  development-sql.yaml: |
+    limit.maxIDLength:
+      - value: 255
+        constraints: {}
+    frontend.workerVersioningDataAPIs:
+      - value: true
+        constraints: {}
+    frontend.workerVersioningWorkflowAPIs:
+      - value: true
+        constraints: {}
+    frontend.workerVersioningRuleAPIs:
+      - value: true
+        constraints: {}
+    system.enableDeploymentVersions:
+      - value: true
+        constraints: {}
+    system.enableDeployments:
+      - value: true
+        constraints: {}
+    callback.allowedAddresses:
+      - value:
+          - Pattern: "*"
+            AllowInsecure: true
+        constraints: {}
+    matching.queryWorkflowTaskTimeoutLogRate:
+      - value: 1.0
+        constraints: {}
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -242,7 +278,7 @@ spec:
             - name: POSTGRES_SEEDS
               value: postiz-temporal-postgres
             - name: DYNAMIC_CONFIG_FILE_PATH
-              value: config/dynamicconfig/development-sql.yaml
+              value: /etc/temporal/config/dynamicconfig/development-sql.yaml
             - name: ENABLE_ES
               value: "true"
             - name: ES_SEEDS
@@ -251,6 +287,10 @@ spec:
               value: v7
             - name: TEMPORAL_NAMESPACE
               value: default
+          volumeMounts:
+            - name: dynamicconfig
+              mountPath: /etc/temporal/config/dynamicconfig
+              readOnly: true
           resources:
             requests:
               memory: "128Mi"
@@ -268,6 +308,10 @@ spec:
               port: 7233
             initialDelaySeconds: 30
             periodSeconds: 10
+      volumes:
+        - name: dynamicconfig
+          configMap:
+            name: postiz-temporal-dynamicconfig
 ---
 # Temporal admin tools — interactive CLI for debugging workflows.
 # No Service; attach via `kubectl exec -it ... -- tctl ...` when needed.
