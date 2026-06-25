@@ -93,7 +93,10 @@ spec:
               memory: "512Mi"
               cpu: "200m"
             limits:
-              memory: "2Gi"
+              # Sized for 3 Node processes (backend + frontend + orchestrator)
+              # plus Prisma first-run schema push which spikes to ~3Gi during
+              # the initial db push on a fresh database. 4Gi gives headroom.
+              memory: "4Gi"
               cpu: "2000m"
           livenessProbe:
             # nginx on :5000 is the public surface — probe that.
