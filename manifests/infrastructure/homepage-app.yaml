@@ -62,11 +62,11 @@ spec:
                 secretKeyRef:
                   name: homeassistant-secrets
                   key: HA_TOKEN
-            - name: HOMEPAGE_VAR_THEGRID_URL
+            - name: HOMEPAGE_VAR_POSTIZ_URL
               valueFrom:
                 secretKeyRef:
-                  name: the-grid-secrets
-                  key: SVELTE_CLAW_URL
+                  name: postiz-secrets
+                  key: MAIN_URL
           volumeMounts:
             - name: config
               mountPath: /app/config

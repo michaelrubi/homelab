@@ -8,7 +8,6 @@ resources:
 - infrastructure/homepage-app.yaml
 - infrastructure/homepage-config.yaml
 - infrastructure/homepage-rbac.yaml
-- infrastructure/kaniko-relay.yaml
 - infrastructure/longhorn-backup-target.yaml
 - infrastructure/longhorn-recurring-job.yaml
 - infrastructure/longhorn-monitor.yaml
@@ -24,7 +23,6 @@ resources:
 - productivity/forgejo.yaml
 - secrets/secrets.sops.yaml
 - productivity/obsidian-sync.yaml
-- productivity/the-grid.yaml
 - social/postiz-app.yaml
 - social/postiz-postgres.yaml
 - social/postiz-redis.yaml

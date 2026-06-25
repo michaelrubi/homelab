@@ -75,10 +75,11 @@ data:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"
             description: "Git Service"
-        - The Grid:
-            icon: svelte-claw.png
-            href: "{{HOMEPAGE_VAR_THEGRID_URL}}"
-            description: "The Grid Dashboard"
+    - Social:
+        - Postiz:
+            icon: postiz.png
+            href: "{{HOMEPAGE_VAR_POSTIZ_URL}}"
+            description: "Social Media Scheduler"
 
   widgets.yaml: |
     - resources:
