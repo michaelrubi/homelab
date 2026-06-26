@@ -6,3 +6,6 @@ secrets.plain.yaml
 .plans/
 .walkthroughs/
 .agent/
+# Source clones made during research / subagent source-grep sessions.
+# Re-clone if needed; not worth tracking.
+research/
