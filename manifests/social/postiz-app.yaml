@@ -79,12 +79,25 @@ spec:
         fsGroup: 1000
       containers:
         - name: postiz
-          image: ghcr.io/gitroomhq/postiz-app:latest
-          imagePullPolicy: Always
+          # Pinned to v2.21.10 (2026-06-22) — fixes PSA-2026-NWZN9J.
+          # IMPORTANT: upstream tags carry the v prefix (CONTAINERVER = github.ref_name).
+          # Pinning to bare 2.21.10 returns 404 MANIFEST_UNKNOWN on GHCR.
+          # imagePullPolicy: IfNotPresent lets the kubelet skip re-pulling when the
+          # local digest matches — equivalent to what :latest gives you, but with a
+          # reproducible identity across reconciles.
+          image: ghcr.io/gitroomhq/postiz-app:v2.21.10
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 5000
               protocol: TCP
+          # IS_GENERAL=true unlocks the Settings → Developers tab (the frontend
+          # gates public-api/Apps UI on process.env.IS_GENERAL). Matches what the
+          # upstream docker-compose.yaml:16 sets. Backend endpoints already work
+          # without it; this just restores the UI to create/rotate API keys.
+          env:
+            - name: IS_GENERAL
+              value: "true"
           envFrom:
             - secretRef:
                 name: postiz-secrets
