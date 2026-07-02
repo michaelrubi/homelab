@@ -132,24 +132,23 @@ spec:
               mountPath: /uploads
             - name: config
               mountPath: /config
-        # Init container: copies the ConfigMap source into a writable
-        # emptyDir at /proxy and runs npm install once. The ConfigMap is
-        # mounted read-only at the kernel level, so we can't run npm in
-        # place — copying + installing into an emptyDir solves both the
-        # read-only issue and avoids paying the npm install tax on every
-        # pod restart.
+        # Init container: copies the ConfigMap source into a writable emptyDir
+        # at /proxy and runs npm install there. The ConfigMap is mounted
+        # read-only at the kernel level, so we can't run npm in place —
+        # copying + installing into the same emptyDir the sidecar reads
+        # from solves both the read-only issue and avoids paying the npm
+        # install tax on every pod restart.
         - name: ai-proxy-init
           image: node:20-alpine
           imagePullPolicy: IfNotPresent
-          workingDir: /work
-          command: ["sh", "-c", "cp /proxy-src/* . && npm install --omit=dev --no-audit --no-fund && cp -r node_modules /out/ && cp package.json server.js /out/ && echo 'init done'"]
+          workingDir: /proxy
+          command: ["sh", "-c", "cp /proxy-src/* /proxy/ && cd /proxy && npm install --omit=dev --no-audit --no-fund && ls -la /proxy/ && echo 'init done'"]
           volumeMounts:
             - name: ai-proxy-src
               mountPath: /proxy-src
-            - name: ai-proxy-work
-              mountPath: /work
+              readOnly: true
             - name: ai-proxy-out
-              mountPath: /out
+              mountPath: /proxy
           resources:
             requests:
               memory: "64Mi"
@@ -225,9 +224,6 @@ spec:
           configMap:
             name: postiz-ai-proxy
             defaultMode: 0o755
-        - name: ai-proxy-work
-          emptyDir:
-            sizeLimit: 256Mi
         - name: ai-proxy-out
           emptyDir:
             sizeLimit: 256Mi
