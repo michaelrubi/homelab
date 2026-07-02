@@ -62,8 +62,12 @@ data:
           req.body.model = mapped;
         }
       }
-      // Stream the JSON-encoded body to the upstream so we don't buffer twice.
-      const upstreamRes = await fetch(`${UPSTREAM}${req.originalUrl}`, {
+      // Build the upstream URL. UPSTREAM already ends in /v1 and req.originalUrl
+      // starts with /v1 (because Postiz hits OPENAI_BASE_URL + "/chat/completions"
+      // etc., where OPENAI_BASE_URL ends with /v1). Strip the leading /v1 so we
+      // don't end up with /v1/v1/chat/completions at OpenRouter.
+      const path = req.originalUrl.replace(/^\/v1(?=\/|$)/, '') || '/';
+      const upstreamRes = await fetch(`${UPSTREAM}${path}`, {
         method: req.method,
         headers: {
           'Authorization': `Bearer ${KEY}`,
