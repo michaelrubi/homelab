@@ -64,15 +64,23 @@ spec:
               "n8n-nodes-forgejo": "*",
               "@mendable/n8n-nodes-firecrawl": "*",
               "n8n-nodes-webcrawlerapi": "*",
-              "n8n-nodes-scoro": "*"
+              "n8n-nodes-scoro": "*",
+              "n8n-nodes-run-node-with-credentials-x": "^0.4.1"
             }
           }
           PKGJSON
-          echo 'Installing custom nodes (skipping native build / optional deps)...'
-          npm install --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund --loglevel=error
+          echo 'Installing custom nodes...'
+          npm install --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund || { echo 'npm install FAILED'; exit 1; }
+          echo 'Verifying packages...'
+          for pkg in n8n-nodes-minimax-chat @kenkaiii/n8n-nodes-supercode n8n-nodes-forgejo @mendable/n8n-nodes-firecrawl n8n-nodes-webcrawlerapi n8n-nodes-scoro; do
+            if [ ! -d "node_modules/$pkg" ]; then
+              echo "ERROR: $pkg not found after install!"
+              exit 1
+            fi
+            echo "  OK: $pkg"
+          done
+          echo 'All custom nodes installed successfully.'
           chown -R 1000:1000 /home/node/.n8n || true
-          echo 'Installed node_modules:'
-          ls /home/node/.n8n/nodes/node_modules 2>&1 | head -30
         volumeMounts:
         - name: n8n-data
           mountPath: /home/node/.n8n
