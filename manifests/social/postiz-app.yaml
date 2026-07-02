@@ -132,6 +132,31 @@ spec:
               mountPath: /uploads
             - name: config
               mountPath: /config
+        # Init container: copies the ConfigMap source into a writable
+        # emptyDir at /proxy and runs npm install once. The ConfigMap is
+        # mounted read-only at the kernel level, so we can't run npm in
+        # place — copying + installing into an emptyDir solves both the
+        # read-only issue and avoids paying the npm install tax on every
+        # pod restart.
+        - name: ai-proxy-init
+          image: node:20-alpine
+          imagePullPolicy: IfNotPresent
+          workingDir: /work
+          command: ["sh", "-c", "cp /proxy-src/* . && npm install --omit=dev --no-audit --no-fund && cp -r node_modules /out/ && cp package.json server.js /out/ && echo 'init done'"]
+          volumeMounts:
+            - name: ai-proxy-src
+              mountPath: /proxy-src
+            - name: ai-proxy-work
+              mountPath: /work
+            - name: ai-proxy-out
+              mountPath: /out
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
         # Sidecar: openai-rewrite-proxy. Postiz's openai-node SDK reads
         # process.env.OPENAI_BASE_URL (set below to http://localhost:8080/v1),
         # so every chat/image call hits this sidecar. The sidecar rewrites
@@ -145,7 +170,7 @@ spec:
           image: node:20-alpine
           imagePullPolicy: IfNotPresent
           workingDir: /proxy
-          command: ["sh", "-c", "npm install --omit=dev --no-audit --no-fund && node server.js"]
+          command: ["node", "server.js"]
           ports:
             - name: proxy
               containerPort: 8080
@@ -187,7 +212,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
           volumeMounts:
-            - name: ai-proxy-src
+            - name: ai-proxy-out
               mountPath: /proxy
       volumes:
         - name: uploads
@@ -200,3 +225,9 @@ spec:
           configMap:
             name: postiz-ai-proxy
             defaultMode: 0o755
+        - name: ai-proxy-work
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: ai-proxy-out
+          emptyDir:
+            sizeLimit: 256Mi
