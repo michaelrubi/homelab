@@ -88,8 +88,8 @@ data:
       }
     });
 
-    app.listen(PORT, () => {
-      console.log(`openai-rewrite-proxy listening on :${PORT}, upstream=${UPSTREAM}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`openai-rewrite-proxy listening on 0.0.0.0:${PORT}, upstream=${UPSTREAM}`);
     });
 
   package.json: |
