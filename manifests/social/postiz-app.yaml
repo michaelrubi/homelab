@@ -132,6 +132,63 @@ spec:
               mountPath: /uploads
             - name: config
               mountPath: /config
+        # Sidecar: openai-rewrite-proxy. Postiz's openai-node SDK reads
+        # process.env.OPENAI_BASE_URL (set below to http://localhost:8080/v1),
+        # so every chat/image call hits this sidecar. The sidecar rewrites
+        # Postiz's hardcoded 'model' field to an OpenRouter-compatible
+        # namespace (gpt-4.1 → minimax/minimax-m3, chatgpt-image-latest →
+        # openai/gpt-image-1) and forwards to OpenRouter. This keeps the
+        # upstream postiz-app image untouched so version bumps don't require
+        # re-porting patches. See postiz-ai-proxy-configmap.yaml for the
+        # rewrite map and proxy code.
+        - name: openai-rewrite-proxy
+          image: node:20-alpine
+          imagePullPolicy: IfNotPresent
+          workingDir: /proxy
+          command: ["sh", "-c", "npm install --omit=dev --no-audit --no-fund && node server.js"]
+          ports:
+            - name: proxy
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: postiz-secrets
+          env:
+            # Force the URL the sidecar listens on, overriding any
+            # OPENAI_BASE_URL from the secret (which is the *pod-level*
+            # setting for the postiz container; the sidecar doesn't need
+            # to know about OpenRouter's URL except via its own logic).
+            - name: OPENAI_BASE_URL
+              value: "http://localhost:8080/v1"
+            - name: OPENAI_REFERER
+              value: "https://postiz.rubiconetic.com"
+            - name: OPENAI_TITLE
+              value: "Postiz"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: proxy
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: proxy
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: ai-proxy-src
+              mountPath: /proxy
       volumes:
         - name: uploads
           persistentVolumeClaim:
@@ -139,3 +196,7 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: postiz-config-pvc
+        - name: ai-proxy-src
+          configMap:
+            name: postiz-ai-proxy
+            defaultMode: 0o755
