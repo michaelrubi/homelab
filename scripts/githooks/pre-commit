@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# pre-commit hook — guard n8n custom-node manifest against workflow drift
+# Co-installed with commit-msg / post-commit via scripts/githooks/install.sh
+#
+# When manifests/automation/n8n.yaml is staged for commit, queries the live
+# n8n Postgres for the set of npm packages every workflow references, and
+# fails the commit if any referenced package is missing from the post-commit
+# dependency block.
+#
+# Behavior:
+#   - Only runs if n8n.yaml is in the staged diff (other commits pass through)
+#   - Reaches cluster via kubectl → in-cluster psql (no secrets in this file)
+#   - WARN-and-allow if cluster unreachable (solo homelab; commit can still
+#     proceed; the lesson file documents the periodic cron as the safety net).
+#   - FAIL on real drift, with the missing packages listed clearly.
+
+set -uo pipefail
+
+N8N_MANIFEST="manifests/automation/n8n.yaml"
+
+# 0. Skip merge commits.
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  exit 0
+fi
+
+# 1. Is the n8n manifest in the staged diff? If not, nothing to audit.
+if ! git diff --cached --name-only --diff-filter=ACMRM | grep -qx "$N8N_MANIFEST"; then
+  exit 0
+fi
+
+# 2. Validate the manifest parses before talking to the cluster, so a typo
+#    fails fast and locally.
+if ! python3 - <<'PY' 2>/dev/null
+import yaml, re, json, sys
+with open("manifests/automation/n8n.yaml") as f:
+    docs = list(yaml.safe_load_all(f))
+for d in docs:
+    if d.get("kind") != "Deployment":
+        continue
+    for c in d.get("spec", {}).get("template", {}).get("spec", {}).get("initContainers", []) or []:
+        if c.get("name") != "init-n8n-nodes":
+            continue
+        cmd = c.get("command", [])
+        script = cmd[-1] if cmd else ""
+        m = re.search(r"<<'PKGJSON'\n(.+?)\n\s*PKGJSON", script, re.S)
+        if m:
+            json.loads(m.group(1))   # raises if not valid JSON
+PY
+then
+  echo "pre-commit (n8n-manifest): $N8N_MANIFEST is not valid YAML or its init container package.json is malformed." >&2
+  echo "  Fix the manifest first, then retry." >&2
+  exit 1
+fi
+
+# 3. Reach the cluster via kubectl. Fail-open if unreachable.
+NS="default"
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "pre-commit (n8n-manifest): kubectl not on PATH; skipping drift audit (commit allowed)." >&2
+  exit 0
+fi
+if ! kubectl -n "$NS" get pod -l app=postgres -o name >/dev/null 2>&1; then
+  echo "pre-commit (n8n-manifest): cluster unreachable; skipping drift audit (commit allowed)." >&2
+  exit 0
+fi
+
+POSTGRES_POD=$(kubectl -n "$NS" get pod -l app=postgres -o name 2>/dev/null | head -1 | cut -d/ -f2)
+if [ -z "$POSTGRES_POD" ]; then
+  echo "pre-commit (n8n-manifest): postgres pod not found; skipping drift audit (commit allowed)." >&2
+  exit 0
+fi
+
+# 4. Run the audit query against n8n Postgres; extract package list.
+#    Built-in nodes (n8n-nodes-base, @n8n/n8n-nodes-langchain) ship with the
+#    n8n image and don't need to be in the init container's install list, so
+#    we exclude them.
+WORKFLOW_PKGS=$(kubectl -n "$NS" exec -i "$POSTGRES_POD" -- sh -c \
+  'PGPASSWORD=$(cat $POSTGRES_PASSWORD) psql -U $POSTGRES_USER -d $POSTGRES_DB -At' <<'SQL' 2>/dev/null \
+  | sort -u
+SELECT DISTINCT split_part(elem->>'type', '.', 1) AS pkg
+FROM workflow_entity w,
+     jsonb_array_elements(w.nodes::jsonb) AS elem
+WHERE w.nodes IS NOT NULL
+  AND elem->>'type' IS NOT NULL
+  AND split_part(elem->>'type', '.', 1) NOT IN (
+    'n8n-nodes-base',
+    '@n8n/n8n-nodes-langchain'
+  );
+SQL
+)
+
+# Fail-open if the cluster query didn't return data.
+if [ -z "$WORKFLOW_PKGS" ]; then
+  echo "pre-commit (n8n-manifest): could not query live workflows from cluster (fail-open). Commit allowed." >&2
+  exit 0
+fi
+
+# 5. Parse the manifest dependency list from the working-tree (post-commit) file.
+MANIFEST_PKGS=$(python3 - 2>/dev/null <<'PY' || true
+import yaml, re, json
+with open("manifests/automation/n8n.yaml") as f:
+    docs = list(yaml.safe_load_all(f))
+for d in docs:
+    if d.get("kind") != "Deployment":
+        continue
+    for c in d.get("spec", {}).get("template", {}).get("spec", {}).get("initContainers", []) or []:
+        if c.get("name") != "init-n8n-nodes":
+            continue
+        cmd = c.get("command", [])
+        script = cmd[-1] if cmd else ""
+        m = re.search(r"<<'PKGJSON'\n(.+?)\n\s*PKGJSON", script, re.S)
+        if m:
+            pkg = json.loads(m.group(1))
+            for name in pkg.get("dependencies", {}):
+                print(name)
+PY
+)
+
+# 6. Diff. Anything in workflows but not in the manifest is drift.
+MISSING=$(comm -23 <(echo "$WORKFLOW_PKGS") <(echo "$MANIFEST_PKGS" | sort -u))
+
+if [ -z "$MISSING" ]; then
+  echo "pre-commit (n8n-manifest): drift audit OK — all $(echo "$WORKFLOW_PKGS" | wc -l | tr -d ' ') workflow-referenced packages are in the manifest." >&2
+  exit 0
+fi
+
+echo "" >&2
+echo "pre-commit (n8n-manifest): drift detected. These packages are used by live" >&2
+echo "n8n workflows but are NOT in the post-commit init container dependency block:" >&2
+echo "" >&2
+echo "$MISSING" | sed 's/^/    /' >&2
+echo "" >&2
+echo "Either add them to $N8N_MANIFEST in this commit, or re-run with" >&2
+echo "--no-verify if you're intentionally committing this drift." >&2
+echo "" >&2
+exit 1
