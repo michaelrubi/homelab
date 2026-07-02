@@ -27,4 +27,3 @@ resources:
 - social/postiz-postgres.yaml
 - social/postiz-redis.yaml
 - social/postiz-temporal.yaml
-- social/postiz-ai-proxy-configmap.yaml

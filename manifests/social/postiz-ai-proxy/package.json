@@ -1,0 +1,14 @@
+{
+  "name": "postiz-ai-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rewrite-proxy that sits as a sidecar to the postiz monolith, intercepts openai-node SDK calls (which set OPENAI_BASE_URL=http://localhost:8080/v1), rewrites the hardcoded model name 'gpt-4.1' to 'minimax/minimax-m3', and forwards to OpenRouter.",
+  "type": "module",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
