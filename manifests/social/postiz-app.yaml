@@ -139,6 +139,21 @@ spec:
               mountPath: /uploads
             - name: config
               mountPath: /config
+            # subPath overlay of instagram.provider.js from the
+            # postiz-instagram-provider-js ConfigMap. Replaces the
+            # upstream image's copy with a version using
+            # instagram_business_* scope names (Meta deprecation). See
+            # postiz-instagram-provider-js-configmap.yaml for the source
+            # and postiz-app#1578 for the upstream bug. Remove both the
+            # volume and this mount once upstream merges the fix.
+            - name: ig-scope-patch
+              subPath: instagram-provider.js
+              mountPath: /app/apps/backend/dist/libraries/nestjs-libraries/src/integrations/social/instagram.provider.js
+              readOnly: true
+            - name: ig-scope-patch
+              subPath: instagram-provider.js
+              mountPath: /app/apps/orchestrator/dist/libraries/nestjs-libraries/src/integrations/social/instagram.provider.js
+              readOnly: true
         # Sidecar: openai-rewrite-proxy. Postiz's openai-node SDK reads
         # process.env.OPENAI_BASE_URL (set to http://localhost:8080/v1),
         # so every chat call hits this sidecar. The sidecar rewrites
@@ -197,3 +212,12 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: postiz-config-pvc
+        # Source of the patched instagram.provider.js used by the
+        # volumeMount above. See postiz-instagram-provider-js-configmap.yaml
+        # for the content and postiz-app#1578 for the upstream fix.
+        - name: ig-scope-patch
+          configMap:
+            name: postiz-instagram-provider-js
+            items:
+              - key: instagram-provider.js
+                path: instagram-provider.js

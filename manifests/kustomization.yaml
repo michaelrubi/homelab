@@ -24,6 +24,7 @@ resources:
 - secrets/secrets.sops.yaml
 - productivity/obsidian-sync.yaml
 - social/postiz-app.yaml
+- social/postiz-instagram-provider-js-configmap.yaml
 - social/postiz-postgres.yaml
 - social/postiz-redis.yaml
 - social/postiz-temporal.yaml
