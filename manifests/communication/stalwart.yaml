@@ -30,20 +30,9 @@ spec:
     requests:
       storage: 20Gi
 ---
-# 2. PVC for /etc/stalwart (config + ACME account + certs).
-# Separate so a config edit can't accidentally touch mail data.
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: stalwart-config-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 1Gi
+# 2. (removed) PVC for /etc/stalwart — the ConfigMap is mounted read-only at
+# that path instead. Certs issued by ACME live in /opt/stalwart-mail/certs
+# (data volume) so the config can stay declarative.
 ---
 # 3. ClusterIP Service for HTTPS (admin + JMAP).
 # Cloudflared tunnel DNS lookup resolves to this Service. Do NOT change name
@@ -122,10 +111,15 @@ spec:
       targetPort: 4190
       protocol: TCP
 ---
-# 5. Stalwart TOML config.
+# Stalwart TOML config.
 # Minimal initial config — most knobs are tuned via the web admin after first
 # login. The server uses RocksDB (data dir) + SQLite (directory) by default,
 # which matches the small-deployment docs recommendation.
+#
+# This ConfigMap is mounted read-only at /etc/stalwart so the binary reads
+# config.toml on startup. Earlier version mounted a PVC here, which blanked
+# the directory and left Stalwart in bootstrap mode (no listeners from this
+# file were ever applied).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -136,19 +130,24 @@ data:
     ##############################################################################
     # Initial Stalwart config. Anything not set here gets sensible defaults.
     # After first login at /admin, configure domains, DKIM keys, and ACME
-    # through the web UI — those edits are written back to the config PVC.
+    # through the web UI; ACME will write certs to /opt/stalwart-mail on the
+    # data PVC, then flip tls = "implicit" on the https listener.
     ##############################################################################
 
     [server]
     # Used in DSN bounces and EHLO greeting. Must match the public hostname.
     hostname = "mail.rubiconetic.com"
 
+    # Start WITHOUT implicit TLS. The admin UI runs on port 8080 over HTTP,
+    # and the cluster Cloudflare tunnel reaches admin + JMAP via port 443
+    # also over HTTP for now. Once ACME has issued a cert, set
+    # tls = "implicit" on the https listener and update the tunnel to
+    # connect with no TLS override.
     [listener.https]
     bind = ["0.0.0.0:443"]
-    tls = "implicit"
 
     [listener.http]
-    bind = ["0.0.0.0:8080"]
+    bind = ["0.0.0.0:8080"]  # recovery / admin UI (HTTP only)
 
     [listener.smtp]
     bind = ["0.0.0.0:25"]
@@ -160,8 +159,8 @@ data:
 
     [listener.smtps]
     bind = ["0.0.0.0:465"]
-    tls = "implicit"
     protocol = "smtp"
+    # tls = "implicit"  # enable after ACME issues a cert
 
     [listener.imap]
     bind = ["0.0.0.0:143"]
@@ -169,8 +168,8 @@ data:
 
     [listener.imaps]
     bind = ["0.0.0.0:993"]
-    tls = "implicit"
     protocol = "imap"
+    # tls = "implicit"  # enable after ACME issues a cert
 
     [listener.pop3]
     bind = ["0.0.0.0:110"]
@@ -178,8 +177,8 @@ data:
 
     [listener.pop3s]
     bind = ["0.0.0.0:995"]
-    tls = "implicit"
     protocol = "pop3"
+    # tls = "implicit"  # enable after ACME issues a cert
 
     [listener.managesieve]
     bind = ["0.0.0.0:4190"]
@@ -317,9 +316,13 @@ spec:
             - name: data
               mountPath: /var/lib/stalwart
       volumes:
+        # /etc/stalwart is the ConfigMap (read-only). Stalwart reads
+        # config.toml from here at startup. Anything the binary needs to
+        # write (ACME account, runtime cache) goes to /opt/stalwart-mail,
+        # which is on the data PVC.
         - name: config
-          persistentVolumeClaim:
-            claimName: stalwart-config-pvc
+          configMap:
+            name: stalwart-config
         - name: data
           persistentVolumeClaim:
             claimName: stalwart-data-pvc
