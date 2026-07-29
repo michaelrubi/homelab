@@ -1,0 +1,324 @@
+# Stalwart Mail Server (https://stalw.art)
+#
+# Self-hosted mail server providing SMTP/IMAP/JMAP for the rubiconetic.com domain.
+# Used for transactional email (reminders, opt-in newsletters) sent via n8n + SMTP,
+# and for receiving mail at user@rubiconetic.com via the public MX.
+#
+# Architecture:
+#   * Public HTTPS (admin + JMAP)  -> Cloudflare Tunnel -> ClusterIP Service:443
+#   * Public SMTP/IMAP (incl. :25) -> Tailscale LoadBalancer Service
+#                                    (requires homelab public IP to accept :25)
+#   * Internal submission (587)    -> in-cluster n8n -> ClusterIP Service:587
+#   * Storage: RocksDB on Longhorn PVC at /var/lib/stalwart
+#   * Config:  TOML ConfigMap at /etc/stalwart
+#
+# First-run: log in to https://mail.rubiconetic.com/admin with the recovery
+# credentials in stalwart-secrets, run the setup wizard, then enable ACME
+# (DNS-01 via Cloudflare API key in stalwart-secrets.CF_API_TOKEN).
+---
+# 1. PVC for mail data (RocksDB blobs, indexes, queue spillover).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stalwart-data-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi
+---
+# 2. PVC for /etc/stalwart (config + ACME account + certs).
+# Separate so a config edit can't accidentally touch mail data.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stalwart-config-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+# 3. ClusterIP Service for HTTPS (admin + JMAP).
+# Cloudflared tunnel DNS lookup resolves to this Service. Do NOT change name
+# without also updating the tunnel config in the Cloudflare Zero Trust dashboard.
+apiVersion: v1
+kind: Service
+metadata:
+  name: stalwart-http
+  namespace: default
+  labels:
+    app: stalwart
+spec:
+  type: ClusterIP
+  selector:
+    app: stalwart
+  ports:
+    - name: https
+      port: 443
+      targetPort: 443
+      protocol: TCP
+    - name: http-alt
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: submission
+      port: 587
+      targetPort: 587
+      protocol: TCP
+---
+# 4. Tailscale LoadBalancer Service for SMTP/IMAP/POP3.
+# Exposes the mail ports on the tailnet (and on the homelab public IP if the
+# Tailscale subnet-router advertises it). Port 25 is what external senders
+# connect to for MX delivery.
+apiVersion: v1
+kind: Service
+metadata:
+  name: stalwart-mail
+  namespace: default
+  labels:
+    app: stalwart
+spec:
+  type: LoadBalancer
+  selector:
+    app: stalwart
+  ports:
+    - name: smtp
+      port: 25
+      targetPort: 25
+      protocol: TCP
+    - name: submission
+      port: 587
+      targetPort: 587
+      protocol: TCP
+    - name: smtps
+      port: 465
+      targetPort: 465
+      protocol: TCP
+    - name: imap
+      port: 143
+      targetPort: 143
+      protocol: TCP
+    - name: imaps
+      port: 993
+      targetPort: 993
+      protocol: TCP
+    - name: pop3
+      port: 110
+      targetPort: 110
+      protocol: TCP
+    - name: pop3s
+      port: 995
+      targetPort: 995
+      protocol: TCP
+    - name: managesieve
+      port: 4190
+      targetPort: 4190
+      protocol: TCP
+---
+# 5. Stalwart TOML config.
+# Minimal initial config — most knobs are tuned via the web admin after first
+# login. The server uses RocksDB (data dir) + SQLite (directory) by default,
+# which matches the small-deployment docs recommendation.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stalwart-config
+  namespace: default
+data:
+  config.toml: |
+    ##############################################################################
+    # Initial Stalwart config. Anything not set here gets sensible defaults.
+    # After first login at /admin, configure domains, DKIM keys, and ACME
+    # through the web UI — those edits are written back to the config PVC.
+    ##############################################################################
+
+    [server]
+    # Used in DSN bounces and EHLO greeting. Must match the public hostname.
+    hostname = "mail.rubiconetic.com"
+
+    [listener.https]
+    bind = ["0.0.0.0:443"]
+    tls = "implicit"
+
+    [listener.http]
+    bind = ["0.0.0.0:8080"]
+
+    [listener.smtp]
+    bind = ["0.0.0.0:25"]
+    protocol = "smtp"
+
+    [listener.submission]
+    bind = ["0.0.0.0:587"]
+    protocol = "smtp"
+
+    [listener.smtps]
+    bind = ["0.0.0.0:465"]
+    tls = "implicit"
+    protocol = "smtp"
+
+    [listener.imap]
+    bind = ["0.0.0.0:143"]
+    protocol = "imap"
+
+    [listener.imaps]
+    bind = ["0.0.0.0:993"]
+    tls = "implicit"
+    protocol = "imap"
+
+    [listener.pop3]
+    bind = ["0.0.0.0:110"]
+    protocol = "pop3"
+
+    [listener.pop3s]
+    bind = ["0.0.0.0:995"]
+    tls = "implicit"
+    protocol = "pop3"
+
+    [listener.managesieve]
+    bind = ["0.0.0.0:4190"]
+    protocol = "managesieve"
+
+    [storage."data"]
+    type = "rocksdb"
+    path = "/var/lib/stalwart/data"
+
+    [storage."directory"]
+    type = "sqlite"
+    path = "/opt/stalwart-mail/directory.db"
+
+    [storage."blob"]
+    type = "rocksdb"
+    path = "/var/lib/stalwart/blobs"
+
+    [storage."fts"]
+    type = "rocksdb"
+    path = "/var/lib/stalwart/fts"
+---
+# 6. Deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stalwart
+  namespace: default
+  annotations:
+    # Restarts the pod automatically if stalwart-secrets changes.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    # RWO PVC + bind-mount — required by Longhorn single-node attachment.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: stalwart
+  template:
+    metadata:
+      labels:
+        app: stalwart
+    spec:
+      # UID 2000 is the stalwart user inside the image. fsGroup ensures the
+      # Longhorn mount gets chown'd on first attach, just like Forgejo.
+      securityContext:
+        fsGroup: 2000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 2000:2000 /etc/stalwart /var/lib/stalwart
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/stalwart
+            - name: config
+              mountPath: /etc/stalwart
+      containers:
+        - name: stalwart
+          image: stalwartlabs/stalwart:v0.16
+          imagePullPolicy: IfNotPresent
+          env:
+            # Skip the bootstrap-temp-password dance — admin creds come from the
+            # SOPS secret below. Format is "user:password".
+            - name: STALWART_RECOVERY_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: stalwart-secrets
+                  key: STALWART_RECOVERY_ADMIN
+            # Publishes the public hostname in OIDC/JMAP discovery docs. Without
+            # this, autodiscover tells clients to connect to the in-pod hostname.
+            - name: STALWART_PUBLIC_URL
+              value: "https://mail.rubiconetic.com"
+          ports:
+            - name: smtp
+              containerPort: 25
+              protocol: TCP
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: submission
+              containerPort: 587
+              protocol: TCP
+            - name: smtps
+              containerPort: 465
+              protocol: TCP
+            - name: imap
+              containerPort: 143
+              protocol: TCP
+            - name: imaps
+              containerPort: 993
+              protocol: TCP
+            - name: pop3
+              containerPort: 110
+              protocol: TCP
+            - name: pop3s
+              containerPort: 995
+              protocol: TCP
+            - name: managesieve
+              containerPort: 4190
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/stalwart
+            - name: data
+              mountPath: /var/lib/stalwart
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: stalwart-config-pvc
+        - name: data
+          persistentVolumeClaim:
+            claimName: stalwart-data-pvc

@@ -4,6 +4,7 @@ resources:
 - automation/n8n-pg.yaml
 - automation/n8n-service.yaml
 - automation/n8n.yaml
+- communication/stalwart.yaml
 - infrastructure/cloudflared.yaml
 - infrastructure/homepage-app.yaml
 - infrastructure/homepage-config.yaml
