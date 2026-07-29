@@ -1,22 +1,38 @@
 # Stalwart Mail Server (https://stalw.art)
 #
-# Self-hosted mail server providing SMTP/IMAP/JMAP for the rubiconetic.com domain.
-# Used for transactional email (reminders, opt-in newsletters) sent via n8n + SMTP,
-# and for receiving mail at user@rubiconetic.com via the public MX.
+# Self-hosted mail server providing SMTP/IMAP/JMAP for the rubiconetic.com
+# domain. Used for transactional email (reminders, opt-in newsletters) sent
+# via n8n + SMTP, and for receiving mail at user@rubiconetic.com via the
+# public MX.
 #
-# Architecture:
-#   * Public HTTPS (admin + JMAP)  -> Cloudflare Tunnel -> ClusterIP Service:443
-#   * Public SMTP/IMAP (incl. :25) -> Tailscale LoadBalancer Service
-#                                    (requires homelab public IP to accept :25)
-#   * Internal submission (587)    -> in-cluster n8n -> ClusterIP Service:587
-#   * Storage: RocksDB on Longhorn PVC at /var/lib/stalwart
-#   * Config:  TOML ConfigMap at /etc/stalwart
+# Layout:
+#   * /etc/stalwart   — config PVC (writable: wizard writes config.toml here,
+#                       ACME writes cert + account key here)
+#   * /var/lib/stalwart — data PVC (RocksDB blobs, indexes, queues)
 #
-# First-run: log in to https://mail.rubiconetic.com/admin with the recovery
-# credentials in stalwart-secrets, run the setup wizard, then enable ACME
-# (DNS-01 via Cloudflare API key in stalwart-secrets.CF_API_TOKEN).
+# Ingress:
+#   * Public HTTPS admin + JMAP via Cloudflared tunnel -> ClusterIP service
+#     on port 8080 (this manifest exposes 8080, not 443 — admin UI is HTTP).
+#     Once ACME issues a cert, switch the tunnel to HTTPS and add tls =
+#     "implicit" to the http listener in the admin UI.
+#   * SMTP/IMAP/POP3 via Tailscale LoadBalancer service. Port 25 is what
+#     external senders connect to for MX delivery.
 ---
-# 1. PVC for mail data (RocksDB blobs, indexes, queue spillover).
+# 1. PVC for /etc/stalwart (config + certs + wizard writes).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stalwart-config-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi
+---
+# 2. PVC for mail data (RocksDB blobs, indexes, queue spillover).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -30,13 +46,9 @@ spec:
     requests:
       storage: 20Gi
 ---
-# 2. (removed) PVC for /etc/stalwart — the ConfigMap is mounted read-only at
-# that path instead. Certs issued by ACME live in /opt/stalwart-mail/certs
-# (data volume) so the config can stay declarative.
----
-# 3. ClusterIP Service for HTTPS (admin + JMAP).
-# Cloudflared tunnel DNS lookup resolves to this Service. Do NOT change name
-# without also updating the tunnel config in the Cloudflare Zero Trust dashboard.
+# 3. ClusterIP Service for HTTP (admin + JMAP via Cloudflared tunnel).
+# Port 8080 is the admin UI; same port serves JMAP. Cloudflared tunnel
+# points mail.rubiconetic.com -> http://stalwart-http.default.svc.cluster.local:8080
 apiVersion: v1
 kind: Service
 metadata:
@@ -49,11 +61,7 @@ spec:
   selector:
     app: stalwart
   ports:
-    - name: https
-      port: 443
-      targetPort: 443
-      protocol: TCP
-    - name: http-alt
+    - name: http
       port: 8080
       targetPort: 8080
       protocol: TCP
@@ -62,10 +70,7 @@ spec:
       targetPort: 587
       protocol: TCP
 ---
-# 4. Tailscale LoadBalancer Service for SMTP/IMAP/POP3.
-# Exposes the mail ports on the tailnet (and on the homelab public IP if the
-# Tailscale subnet-router advertises it). Port 25 is what external senders
-# connect to for MX delivery.
+# 4. Tailscale LoadBalancer Service for SMTP / IMAP / POP3.
 apiVersion: v1
 kind: Service
 metadata:
@@ -111,108 +116,23 @@ spec:
       targetPort: 4190
       protocol: TCP
 ---
-# Stalwart TOML config.
-# Minimal initial config — most knobs are tuned via the web admin after first
-# login. The server uses RocksDB (data dir) + SQLite (directory) by default,
-# which matches the small-deployment docs recommendation.
-#
-# This ConfigMap is mounted read-only at /etc/stalwart so the binary reads
-# config.toml on startup. Earlier version mounted a PVC here, which blanked
-# the directory and left Stalwart in bootstrap mode (no listeners from this
-# file were ever applied).
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: stalwart-config
-  namespace: default
-data:
-  config.toml: |
-    ##############################################################################
-    # Initial Stalwart config. Anything not set here gets sensible defaults.
-    # After first login at /admin, configure domains, DKIM keys, and ACME
-    # through the web UI; ACME will write certs to /opt/stalwart-mail on the
-    # data PVC, then flip tls = "implicit" on the https listener.
-    ##############################################################################
-
-    [server]
-    # Used in DSN bounces and EHLO greeting. Must match the public hostname.
-    hostname = "mail.rubiconetic.com"
-
-    # Start WITHOUT implicit TLS. The admin UI runs on port 8080 over HTTP,
-    # and the cluster Cloudflare tunnel reaches admin + JMAP via port 443
-    # also over HTTP for now. Once ACME has issued a cert, set
-    # tls = "implicit" on the https listener and update the tunnel to
-    # connect with no TLS override.
-    [listener.https]
-    bind = ["0.0.0.0:443"]
-
-    [listener.http]
-    bind = ["0.0.0.0:8080"]  # recovery / admin UI (HTTP only)
-
-    [listener.smtp]
-    bind = ["0.0.0.0:25"]
-    protocol = "smtp"
-
-    [listener.submission]
-    bind = ["0.0.0.0:587"]
-    protocol = "smtp"
-
-    [listener.smtps]
-    bind = ["0.0.0.0:465"]
-    protocol = "smtp"
-    # tls = "implicit"  # enable after ACME issues a cert
-
-    [listener.imap]
-    bind = ["0.0.0.0:143"]
-    protocol = "imap"
-
-    [listener.imaps]
-    bind = ["0.0.0.0:993"]
-    protocol = "imap"
-    # tls = "implicit"  # enable after ACME issues a cert
-
-    [listener.pop3]
-    bind = ["0.0.0.0:110"]
-    protocol = "pop3"
-
-    [listener.pop3s]
-    bind = ["0.0.0.0:995"]
-    protocol = "pop3"
-    # tls = "implicit"  # enable after ACME issues a cert
-
-    [listener.managesieve]
-    bind = ["0.0.0.0:4190"]
-    protocol = "managesieve"
-
-    [storage."data"]
-    type = "rocksdb"
-    path = "/var/lib/stalwart/data"
-
-    [storage."directory"]
-    type = "sqlite"
-    path = "/opt/stalwart-mail/directory.db"
-
-    [storage."blob"]
-    type = "rocksdb"
-    path = "/var/lib/stalwart/blobs"
-
-    [storage."fts"]
-    type = "rocksdb"
-    path = "/var/lib/stalwart/fts"
----
-# 6. Deployment.
+# 5. Deployment. Two writable PVCs, fsGroup 2000 so both are owned by the
+# stalwart user inside the container. NO init container — the longhorn
+# fsGroup ownership on a fresh PVC does the right thing on first attach.
+# NO ConfigMap mounted at /etc/stalwart — Stalwart's wizard writes its
+# generated config.toml there, and the binary uses sensible defaults
+# (RocksDB + SQLite, listeners on all the mail ports) when no config.toml
+# exists yet. After the wizard runs, this works as expected.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: stalwart
   namespace: default
   annotations:
-    # Restarts the pod automatically if stalwart-secrets changes.
     reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   strategy:
-    # RWO PVC + bind-mount — required by Longhorn single-node attachment.
     type: Recreate
   selector:
     matchLabels:
@@ -222,37 +142,18 @@ spec:
       labels:
         app: stalwart
     spec:
-      # UID 2000 is the stalwart user inside the image. fsGroup ensures the
-      # Longhorn mount gets chown'd on first attach, just like Forgejo.
       securityContext:
         fsGroup: 2000
-      initContainers:
-        - name: fix-permissions
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              chown -R 2000:2000 /etc/stalwart /var/lib/stalwart
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/stalwart
-            - name: config
-              mountPath: /etc/stalwart
       containers:
         - name: stalwart
           image: stalwartlabs/stalwart:v0.16
           imagePullPolicy: IfNotPresent
           env:
-            # Skip the bootstrap-temp-password dance — admin creds come from the
-            # SOPS secret below. Format is "user:password".
             - name: STALWART_RECOVERY_ADMIN
               valueFrom:
                 secretKeyRef:
                   name: stalwart-secrets
                   key: STALWART_RECOVERY_ADMIN
-            # Publishes the public hostname in OIDC/JMAP discovery docs. Without
-            # this, autodiscover tells clients to connect to the in-pod hostname.
             - name: STALWART_PUBLIC_URL
               value: "https://mail.rubiconetic.com"
           ports:
@@ -261,9 +162,6 @@ spec:
               protocol: TCP
             - name: http
               containerPort: 8080
-              protocol: TCP
-            - name: https
-              containerPort: 443
               protocol: TCP
             - name: submission
               containerPort: 587
@@ -286,9 +184,6 @@ spec:
             - name: managesieve
               containerPort: 4190
               protocol: TCP
-          # Stalwart doesn't expose a dedicated health endpoint. Probe the
-          # admin HTTP listener (port 8080) with a raw TCP connect — if the
-          # listener is bound, the binary is up.
           livenessProbe:
             tcpSocket:
               port: http
@@ -316,13 +211,9 @@ spec:
             - name: data
               mountPath: /var/lib/stalwart
       volumes:
-        # /etc/stalwart is the ConfigMap (read-only). Stalwart reads
-        # config.toml from here at startup. Anything the binary needs to
-        # write (ACME account, runtime cache) goes to /opt/stalwart-mail,
-        # which is on the data PVC.
         - name: config
-          configMap:
-            name: stalwart-config
+          persistentVolumeClaim:
+            claimName: stalwart-config-pvc
         - name: data
           persistentVolumeClaim:
             claimName: stalwart-data-pvc
