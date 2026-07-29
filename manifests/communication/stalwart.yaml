@@ -287,18 +287,19 @@ spec:
             - name: managesieve
               containerPort: 4190
               protocol: TCP
+          # Stalwart doesn't expose a dedicated health endpoint. Probe the
+          # admin HTTP listener (port 8080) with a raw TCP connect — if the
+          # listener is bound, the binary is up.
           livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 8080
+            tcpSocket:
+              port: http
             initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
-            httpGet:
-              path: /healthz
-              port: 8080
+            tcpSocket:
+              port: http
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
