@@ -75,6 +75,15 @@ data:
             icon: forgejo.png
             href: "{{HOMEPAGE_VAR_FORGEJO_URL}}"
             description: "Git Service"
+        - Kaneo:
+            icon: https://raw.githubusercontent.com/usekaneo/kaneo/main/apps/web/public/favicon.svg
+            href: "{{HOMEPAGE_VAR_KANEO_URL}}"
+            description: "Project Management"
+    - Communication:
+        - Stalwart Mail:
+            icon: https://stalw.art/favicon.svg
+            href: "{{HOMEPAGE_VAR_STALWART_URL}}"
+            description: "Self-hosted Mail"
     - Social:
         - Postiz:
             icon: postiz.png
