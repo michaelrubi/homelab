@@ -1,0 +1,117 @@
+# Kaneo — open-source project management (kanban/tasks/projects).
+# Single container runs both the Hono API (port 1337 inside the container)
+# and the static web frontend served by nginx (port 5173). The bundled
+# entrypoint (/usr/local/bin/kaneo-entrypoint.sh) starts the Node API
+# first, waits for /api/health to come up, then launches nginx in the
+# foreground — so we probe nginx on :5173 (the public surface).
+#
+# KANEO_API_URL is derived automatically from KANEO_CLIENT_URL at runtime
+# by the entrypoint (it just appends "/api"). We still set it explicitly
+# via Secret so the value is obvious in `kubectl describe`.
+#
+# DATABASE_URL is also set explicitly on the Deployment (not via Secret)
+# because the Postgres password is colocated with the connection string
+# in kaneo-postgres-pvc (which the postgres pod initializes at first
+# boot from kaneo-db-secrets). If you rotate kaneo-db-secrets.POSTGRES_PASSWORD,
+# update this DATABASE_URL line in lockstep or the pod will fail with
+# "password authentication failed" — there is no rotating-credential
+# mechanism on first init.
+#
+# Public hostname kaneo.rubiconetic.com is routed via the Cloudflare
+# tunnel dashboard → http://kaneo-service.default.svc.cluster.local:5173.
+# Service stays ClusterIP; cloudflared does the public ingress.
+#
+# Recreate strategy + Reloader annotation handle secret-driven restarts.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kaneo-service
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: kaneo
+  ports:
+    - name: http
+      port: 5173
+      targetPort: 5173
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaneo
+  namespace: default
+  annotations:
+    # Restarts the pod when kaneo-secrets changes.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kaneo
+  template:
+    metadata:
+      labels:
+        app: kaneo
+    spec:
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: kaneo
+          # Pinned to 2.12.1 (2026-07-30 release; Chart.yaml + GHCR both match).
+          # Upstream tags do NOT carry a `v` prefix here (compose.yml uses
+          # :latest, but the chart and workflow build with bare semver).
+          # imagePullPolicy default = IfNotPresent; kubelet skips re-pull when
+          # the local digest matches.
+          image: ghcr.io/usekaneo/kaneo:2.12.1
+          ports:
+            - name: http
+              containerPort: 5173
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: kaneo-secrets
+          # DATABASE_URL — explicit. The entrypoint would derive this from
+          # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_HOST but we set it
+          # directly so the connection string is visible at a glance and
+          # immune to any future derivation logic changes. Password is
+          # urlencoded at write time (only [a-zA-Z0-9-_] used → no encoding
+          # actually needed, but the literal form is unambiguous).
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://kaneo:dY962fDmH7rqnmSKPA3YXOmIKTfmUbVUzD5UfQzq@kaneo-postgres:5432/kaneo"
+            - name: POSTGRES_HOST
+              value: "kaneo-postgres"
+            - name: POSTGRES_PORT
+              value: "5432"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              # Sized for one Node process (Hono + Drizzle + better-auth +
+              # MCP server + croner cron jobs) plus nginx. First-run
+              # Drizzle migrations can transiently spike; 2Gi gives headroom.
+              memory: "2Gi"
+              cpu: "1000m"
+          livenessProbe:
+            # nginx on :5173 is the public surface; /api/health proxies to
+            # the Hono API on :1337 inside the container.
+            httpGet:
+              path: /api/health
+              port: 5173
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5173
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5

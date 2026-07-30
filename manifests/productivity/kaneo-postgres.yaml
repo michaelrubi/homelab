@@ -1,0 +1,83 @@
+# Postgres 16 for Kaneo (project management — usekaneo/kaneo).
+# Kaneo uses Drizzle ORM + better-auth; schema lives entirely in `public`.
+# Dedicated pod so rotating Kaneo's DB doesn't risk n8n/postiz (matches the
+# existing per-app Postgres convention). Recreate strategy because the data
+# dir is a Longhorn RWO mount.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kaneo-postgres-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kaneo-postgres
+  namespace: default
+spec:
+  selector:
+    app: kaneo-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaneo-postgres
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kaneo-postgres
+  template:
+    metadata:
+      labels:
+        app: kaneo-postgres
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: kaneo-db-secrets
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+              subPath: data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "kaneo", "-d", "kaneo"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "kaneo", "-d", "kaneo"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: kaneo-postgres-pvc
