@@ -1,0 +1,39 @@
+# Alert on the flannel-death signature: longhorn-manager containers
+# restart-looping because cross-node networking silently broke while the
+# node still reports Ready. Same symptom caused the 2026-08 outage.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-flannel-death
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: longhorn-network.rules
+      rules:
+        - alert: LonghornManagerRestartLoop
+          expr: increase(kube_pod_container_status_restarts_total{namespace="longhorn-system", container="longhorn-manager"}[1h]) > 3
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "longhorn-manager restart-looping on {{ $labels.node }}: flannel may be dead"
+            description: >-
+              {{ $labels.node }} will still report Ready when flannel's
+              VXLAN interface silently dies. Check `ip link show flannel.1`
+              on the node; if missing, restart k3s (control plane) or
+              k3s-agent (worker). See the runbook for the confirmed fix.
+        - alert: FlannelInterfaceMissing
+          # VXLAN interfaces report operstate unknown, so node_network_up is
+          # permanently 0. Detect death by the device disappearing entirely:
+          # the series count drops below the cluster's node count.
+          expr: count(node_network_up{device="flannel.1"}) < count(count by (instance) (node_network_up{device="cni0"}))
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "flannel.1 missing on a node: cross-node pod networking down"
+            description: >-
+              Restart k3s (control plane) or k3s-agent (worker) to restore
+              the VXLAN interface.

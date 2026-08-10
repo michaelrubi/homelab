@@ -9,6 +9,8 @@ resources:
 - infrastructure/homepage-app.yaml
 - infrastructure/homepage-config.yaml
 - infrastructure/homepage-rbac.yaml
+- infrastructure/kured.yaml
+- infrastructure/longhorn-alerts.yaml
 - infrastructure/longhorn-backup-target.yaml
 - infrastructure/longhorn-recurring-job.yaml
 - infrastructure/longhorn-monitor.yaml

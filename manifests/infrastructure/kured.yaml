@@ -1,0 +1,41 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kubereboot
+  namespace: default
+spec:
+  interval: 2h
+  url: https://kubereboot.github.io/charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kured
+  namespace: default
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: kured
+      version: "5.x"
+      sourceRef:
+        kind: HelmRepository
+        name: kubereboot
+      interval: 10m
+  values:
+    configuration:
+      # Weekly rolling reboot window: Sundays 03:00-05:00 local time.
+      # Kured drains + uncordons each node, so only one node reboots at a
+      # time and workloads reschedule cleanly.
+      rebootDays:
+        - su
+      startTime: "03:00"
+      endTime: "05:00"
+      timeZone: America/Phoenix
+      # Reboot every window unconditionally: flannel dies after ~70 days of
+      # uptime regardless of pending package updates, so we can't rely on
+      # Ubuntu's reboot-required sentinel.
+      period: 1h
+      forceReboot: true
+      drainGracePeriod: 120
+      drainTimeout: 5m
