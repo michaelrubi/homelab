@@ -91,6 +91,22 @@ spec:
               key: COUCHDB_PASSWORD
         ports:
         - containerPort: 5984
+        lifecycle:
+          postStart:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  for i in $(seq 1 30); do
+                    if curl -s -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/ >/dev/null 2>&1; then
+                      curl -s -X PUT -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_users >/dev/null 2>&1 || true
+                      curl -s -X PUT -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_replicator >/dev/null 2>&1 || true
+                      curl -s -X PUT -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_global_changes >/dev/null 2>&1 || true
+                      break
+                    fi
+                    sleep 1
+                  done
         resources:
           requests:
             memory: "256Mi"
