@@ -98,8 +98,8 @@ spec:
                 - sh
                 - -c
                 - |
-                  for i in $(seq 1 30); do
-                    if curl -s -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/ >/dev/null 2>&1; then
+                  for i in $(seq 1 60); do
+                    if curl -s -o /dev/null -w '%{http_code}' -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_all_dbs 2>/dev/null | grep -q 200; then
                       curl -s -X PUT -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_users >/dev/null 2>&1 || true
                       curl -s -X PUT -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_replicator >/dev/null 2>&1 || true
                       curl -s -X PUT -u "$COUCHDB_USER:$COUCHDB_PASSWORD" http://localhost:5984/_global_changes >/dev/null 2>&1 || true
