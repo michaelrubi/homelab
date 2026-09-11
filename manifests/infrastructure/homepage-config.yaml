@@ -60,6 +60,15 @@ data:
               url: "{{HOMEPAGE_VAR_JELLYFIN_IP}}"
               key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
               enableBlocks: true
+        - Transmission:
+            icon: transmission.png
+            href: "http://gpu.robin-mine.ts.net:9091/transmission/web/"
+            description: "Torrent Client (GPU)"
+    - AI:
+        - ComfyUI:
+            icon: comfyui.png
+            href: "http://gpu.robin-mine.ts.net:8188"
+            description: "Image Generation (GPU)"
     - Smart Home:
         - Home Assistant:
             icon: home-assistant.png
