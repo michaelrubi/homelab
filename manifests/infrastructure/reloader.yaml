@@ -26,3 +26,13 @@ spec:
     reloader:
       # efficient watching of secrets
       watchGlobally: true
+      deployment:
+        # 2026-09-11: chart ships no resource requests, so this ran as
+        # BestEffort -- first in line to be evicted under node pressure.
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "192Mi"
+            cpu: "200m"

@@ -225,6 +225,13 @@ spec:
         # 1. The Runner Daemon
         - name: runner
           image: data.forgejo.org/forgejo/runner:12
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
           command:
             - "/bin/sh"
             - "-c"
@@ -268,6 +275,16 @@ spec:
         # 2. Docker-in-Docker (The Builder)
         - name: docker
           image: docker:dind
+          # dind builds are bursty: a low request keeps it off the
+          # scheduler's critical path, the limit stops a runaway build
+          # from taking the node down with it.
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
           securityContext:
             privileged: true
           env:

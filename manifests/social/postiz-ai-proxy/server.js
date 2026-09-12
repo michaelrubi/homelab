@@ -45,6 +45,15 @@ const app = express();
 // generous limit avoids surprises if a future Postiz feature sends more.
 app.use(express.json({ limit: '10mb' }));
 
+// Health endpoint. MUST stay above the catch-all app.use() below, which
+// forwards every remaining path upstream. Without this, a kubelet probe
+// on any path is proxied to OpenRouter and comes back 404 — which is
+// exactly what crash-looped this sidecar 1961 times on 2026-09-11.
+// The deployment currently probes via tcpSocket because the running
+// 0.1.0 image predates this route; switch it to httpGet /healthz when
+// the image is rebuilt and the tag bumped.
+app.get('/healthz', (_req, res) => res.status(200).json({ status: 'ok' }));
+
 app.use(async (req, res) => {
   // Rewrite model field if it's a hardcoded name Postiz sends.
   let requestedModel = req.body?.model;

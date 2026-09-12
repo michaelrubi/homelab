@@ -110,7 +110,12 @@ spec:
                 name: postiz-secrets
           resources:
             requests:
-              memory: "512Mi"
+              # 2026-09-11: was 512Mi while the pod actually held ~2.4Gi.
+              # The scheduler places pods on requests, not usage, so this
+              # one understatement made node01 look ~1.8Gi emptier than it
+              # was -- which is how 68 pods ended up on one 8Gi node while
+              # node02 ran a single workload. Request what it really uses.
+              memory: "2Gi"
               cpu: "200m"
             limits:
               # Sized for 3 Node processes (backend + frontend + orchestrator)
@@ -190,17 +195,26 @@ spec:
             limits:
               memory: "128Mi"
               cpu: "200m"
+          # 2026-09-11: these were httpGet on "/", which this sidecar does
+          # NOT serve -- server.js is a single catch-all app.use() that
+          # forwards every path upstream. So each probe made a real billed
+          # call to OpenRouter, got a 404 back, and kubelet counted it as a
+          # failure: 1961 restarts, and ~8600 junk upstream requests a day.
+          #
+          # tcpSocket is the correct check for the deployed 0.1.0 image: it
+          # verifies the listener is accepting connections without inventing
+          # a route that does not exist. server.js now has a /healthz route
+          # for a future rebuild -- once the image is bumped past 0.1.0,
+          # these can become httpGet on /healthz for a real liveness signal.
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: proxy
             initialDelaySeconds: 5
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: proxy
             initialDelaySeconds: 2
             periodSeconds: 10

@@ -99,7 +99,9 @@ spec:
         - containerPort: 5678
         resources:
           requests:
-            memory: "256Mi"
+            # Measured at ~613Mi on 2026-09-11 against a 256Mi request.
+            # Under-requesting hides real load from the scheduler.
+            memory: "640Mi"
             cpu: "100m"
           limits:
             memory: "2Gi"

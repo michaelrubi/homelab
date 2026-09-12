@@ -178,10 +178,12 @@ spec:
               value: 128mb
           resources:
             requests:
-              memory: "384Mi"
+              # Measured at ~547Mi steady-state on 2026-09-11, above the
+              # old 384Mi request. Raised so the scheduler accounts for it.
+              memory: "640Mi"
               cpu: "100m"
             limits:
-              memory: "768Mi"
+              memory: "1Gi"
               cpu: "500m"
           livenessProbe:
             httpGet:

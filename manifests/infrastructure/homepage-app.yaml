@@ -19,6 +19,15 @@ spec:
           image: ghcr.io/gethomepage/homepage:latest
           ports:
             - containerPort: 3000
+          # 2026-09-11: had no requests at all, so the scheduler counted
+          # this pod as free. Measured ~119Mi steady-state.
+          resources:
+            requests:
+              memory: "160Mi"
+              cpu: "50m"
+            limits:
+              memory: "384Mi"
+              cpu: "500m"
           env:
             - name: HOMEPAGE_ALLOWED_HOSTS
               value: "*"

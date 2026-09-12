@@ -32,7 +32,7 @@ spec:
       service:
         type: LoadBalancer
         port: 8084
-      
+
       # Persist Dashboards & Users using Longhorn
       persistence:
         enabled: true
@@ -42,7 +42,13 @@ spec:
     # 2. Prometheus Configuration
     prometheus:
       prometheusSpec:
-        # Persist Metrics Data using Longhorn
+        # Persist Metrics Data using Longhorn.
+        #
+        # 2026-09-11: this volume filled completely and Prometheus
+        # crash-looped 1537 times with "no space left on device" on the WAL.
+        # There was no retention cap at all, so the 10Gi volume grew until
+        # the filesystem was full and monitoring went blind for 5 days.
+        # Volume raised to 20Gi; retentionSize caps the TSDB well below it.
         storageSpec:
           volumeClaimTemplate:
             spec:
@@ -50,8 +56,16 @@ spec:
               accessModes: ["ReadWriteOnce"]
               resources:
                 requests:
-                  storage: 10Gi
-        
+                  storage: 20Gi
+
+        # Hard ceiling on disk use. retentionSize is the safety net: time
+        # retention alone cannot protect the volume, because how much disk
+        # 15d costs depends on how many series are being scraped. Keep this
+        # comfortably under the volume size to leave room for the WAL and
+        # for compaction, which needs scratch space while it rewrites blocks.
+        retention: 15d
+        retentionSize: 12GiB
+
         # Resource limits to prevent OOM kills
         resources:
           requests:
@@ -60,3 +74,83 @@ spec:
           limits:
             memory: 2Gi
             cpu: 1000m
+
+    # 3. Alertmanager Configuration
+    alertmanager:
+      config:
+        global:
+          resolve_timeout: 5m
+
+        route:
+          # Default destination for everything that is not Watchdog.
+          #
+          # 2026-09-11: this was previously receiver "null" -- the chart
+          # default -- so every alert in the cluster was discarded. Four
+          # separate failures (Prometheus disk full, NFS backup mounts
+          # denied, forgejo runner deregistered, postiz probe misconfigured)
+          # ran unnoticed for 5+ days, and the hand-written Longhorn alerts
+          # in longhorn-alerts.yaml fired into the void.
+          receiver: ntfy
+          group_by: [alertname, namespace]
+          group_wait: 30s
+          group_interval: 5m
+          # Re-notify every 4h rather than every 12h. A homelab outage that
+          # resolves itself between two 12h reminders leaves no trace.
+          repeat_interval: 4h
+
+          routes:
+            # Watchdog is a synthetic alert that kube-prometheus-stack fires
+            # CONTINUOUSLY, by design, for exactly this purpose. Sending it
+            # to a dead-man's-switch means the absence of alerts is itself
+            # monitored: if Prometheus dies, the node dies, or the cluster
+            # dies, the pings stop and healthchecks.io notifies out-of-band.
+            #
+            # This is the layer that would have caught the Sep 6 outage on
+            # day one. A normal alert path could not -- Prometheus was the
+            # thing that was down, so it could not alert on its own death.
+            - receiver: deadmansswitch
+              matchers:
+                - alertname = "Watchdog"
+              group_wait: 0s
+              group_interval: 5m
+              repeat_interval: 5m
+
+            # Critical alerts re-notify aggressively.
+            - receiver: ntfy
+              matchers:
+                - severity = "critical"
+              continue: false
+              repeat_interval: 1h
+
+        receivers:
+          - name: ntfy
+            webhook_configs:
+              # NOTE: this URL is a capability -- anyone who knows the topic
+              # can read these alerts and publish to it. The topic is random
+              # for that reason. ntfy.sh free tier cannot reserve topics or
+              # require auth; if you want that, self-host ntfy or move this
+              # block to a sops-encrypted alertmanager configSecret.
+              - url: https://ntfy.sh/homelab-alerts-b5b04a9b1190a542
+                send_resolved: true
+                max_alerts: 0
+
+          - name: deadmansswitch
+            webhook_configs:
+              # healthchecks.io check configured with period 5m / grace
+              # 15m, matching the repeat_interval on the Watchdog route
+              # above: a ping every 5 minutes, and it alerts after roughly
+              # three are missed. Like the ntfy topic, this URL is a
+              # capability -- anyone holding it can ping the check and keep
+              # it looking alive, so treat it as a secret.
+              - url: https://hc-ping.com/bc2e331a-8720-4797-b3bb-048da093ff8b
+                send_resolved: false
+
+        inhibit_rules:
+          # Suppress warning/info for a resource already firing critical,
+          # so one real failure does not arrive as three notifications.
+          - source_matchers: [severity = "critical"]
+            target_matchers: [severity =~ "warning|info"]
+            equal: [namespace, alertname]
+          - source_matchers: [severity = "warning"]
+            target_matchers: [severity = "info"]
+            equal: [namespace, alertname]

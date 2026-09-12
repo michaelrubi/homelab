@@ -48,6 +48,15 @@ spec:
         image: postgres:16
         ports:
         - containerPort: 5432
+        # 2026-09-11: no requests were set, so the scheduler treated this
+        # database as weightless when placing pods.
+        resources:
+          requests:
+            memory: "192Mi"
+            cpu: "50m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
         envFrom:
         - secretRef:
             name: n8n-db-secrets

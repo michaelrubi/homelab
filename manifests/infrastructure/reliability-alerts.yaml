@@ -1,0 +1,104 @@
+# Alerts for the failure modes that ran unnoticed from 2026-09-06 to
+# 2026-09-11. kube-prometheus-stack's built-in rules already cover pod
+# crash-looping and PVCs filling up; these cover the gaps it does not:
+# a backup that silently stops running, a pod wedged Pending on a volume
+# it can never mount, and a single node quietly absorbing the whole
+# cluster until it starts swapping.
+#
+# None of these are useful without a real Alertmanager receiver. See the
+# route config in monitoring.yaml -- it was previously "null", which is
+# why the existing longhorn-alerts.yaml rules never reached anyone.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab-reliability
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: backup.rules
+      rules:
+        - alert: BackupCronJobStale
+          # postgres-dump-standalone runs daily at 04:00. 36h means we've
+          # missed at least one full run plus a margin for a slow night.
+          #
+          # On 2026-09-11 this job had not succeeded in 5 days: every run
+          # died on "access denied by server" mounting the NFS export from
+          # thinkcentre02, 3908 failed mount attempts, zero notifications.
+          expr: (time() - kube_cronjob_status_last_successful_time{cronjob=~".*(backup|dump).*"}) > 36 * 3600
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backup {{ $labels.cronjob }} has not succeeded in over 36h"
+            description: >-
+              {{ $labels.namespace }}/{{ $labels.cronjob }} last completed
+              {{ $value | humanizeDuration }} ago. Check for a Pending pod
+              stuck on a volume mount:
+              kubectl get pods -n {{ $labels.namespace }} | grep {{ $labels.cronjob }}
+
+        - alert: BackupCronJobNeverSucceeded
+          # The staleness rule above cannot fire if the series is absent,
+          # which is the case for a job that has never once completed.
+          expr: absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-standalone"})
+          for: 2h
+          labels:
+            severity: critical
+          annotations:
+            summary: "postgres-dump-standalone has no successful run on record"
+            description: >-
+              No completion has ever been recorded for the Postgres dump
+              job. Either it has never worked, or kube-state-metrics is not
+              reporting. Both are worth looking at immediately.
+
+    - name: workload.rules
+      rules:
+        - alert: PodPendingTooLong
+          # Catches the wedged-on-a-volume case directly. The Postgres dump
+          # pod sat Pending for 5d12h retrying an NFS mount that was never
+          # going to succeed, because the export on thinkcentre02 did not
+          # permit it. Nothing in the default ruleset notices a Pending pod.
+          expr: kube_pod_status_phase{phase="Pending"} == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} Pending for 30m+"
+            description: >-
+              Usually an unschedulable pod or a volume that will not mount.
+              kubectl describe pod -n {{ $labels.namespace }} {{ $labels.pod }}
+
+    - name: node-capacity.rules
+      rules:
+        - alert: NodeMemoryCritical
+          # thinkcentre01 sat at 471Mi available of 7.6Gi with 2Gi of swap
+          # consumed on 2026-09-11. At that point liveness probes across
+          # the cluster time out and healthy pods get killed and restarted,
+          # which looks like dozens of unrelated application failures.
+          expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 12
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.instance }} has under 12% memory available"
+            description: >-
+              Only {{ $value | printf "%.1f" }}% available. Expect probe
+              timeouts and a cluster-wide restart storm. Check whether
+              workloads have drifted onto one node:
+              kubectl get pods -A -o wide --field-selector spec.nodeName={{ $labels.instance }}
+
+        - alert: NodeSwapInUse
+          # These nodes should never touch swap. Sustained swap use is the
+          # earliest honest signal that a node is oversubscribed -- it
+          # precedes the probe timeouts by hours.
+          expr: (node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) > 512 * 1024 * 1024
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.instance }} is swapping ({{ $value | humanize1024 }}B in use)"
+            description: >-
+              Sustained swap use means memory requests no longer reflect
+              reality on this node. Compare requests against actual usage
+              before the node starts thrashing.

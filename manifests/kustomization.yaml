@@ -18,6 +18,7 @@ resources:
 - infrastructure/monitoring.yaml
 - infrastructure/pgweb.yaml
 - infrastructure/postgres-dump.yaml
+- infrastructure/reliability-alerts.yaml
 - infrastructure/reloader.yaml
 - infrastructure/renovate.yaml
 - infrastructure/vaultwarden.yaml
