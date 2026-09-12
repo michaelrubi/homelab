@@ -75,6 +75,20 @@ spec:
       template:
         spec:
           restartPolicy: OnFailure
+          # SETUP REQUIREMENT: the NFS directory on thinkcentre02 at
+          # /var/lib/longhorn-backups/postgres-dumps must be owned by
+          # 999:999. It was created root:root 0755, and because this job
+          # runs as UID 999 every write failed with EACCES. fsGroup does
+          # NOT solve this -- kubelet skips ownership changes on NFS
+          # volumes, so the pod lands with gid=0 regardless of what is
+          # set here. Fixed on 2026-09-12 with chown 999:999 + chmod 0775.
+          #
+          # This was the second of two stacked bugs that kept this job
+          # from ever producing a dump: the PV pointed at an unresolvable
+          # hostname, so pods never got past mounting and the permission
+          # problem stayed hidden behind it for 81 days. If the directory
+          # is ever recreated, BackupCronJobStale in reliability-alerts
+          # fires within 36h rather than letting it rot silently again.
           securityContext:
             runAsNonRoot: true
             runAsUser: 999
