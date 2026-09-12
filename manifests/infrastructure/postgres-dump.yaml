@@ -19,7 +19,19 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: thinkcentre02
+    # Tailscale IP, deliberately not the hostname. "thinkcentre02" is
+    # broken as an NFS server name from both nodes, for two different
+    # reasons, which is why every run since 2026-09-06 failed:
+    #   - from thinkcentre01 it does not resolve at all (NXDOMAIN); the
+    #     mount hangs rather than failing fast.
+    #   - from thinkcentre02 it resolves via that host's own /etc/hosts
+    #     to 127.0.1.1, so the mount arrives over loopback and the server
+    #     rejects it -- 127.0.0.1 is not in /etc/exports, which lists only
+    #     the two Tailscale IPs and the pod CIDR. That is the "access
+    #     denied by server" seen 3943 times.
+    # The IP is reachable from both nodes (2049 and 111 open) and is
+    # already permitted by the export, so it works wherever the job lands.
+    server: 100.95.215.63
     path: /var/lib/longhorn-backups/postgres-dumps
   mountOptions:
     - hard
