@@ -27,6 +27,61 @@ spec:
         kind: HelmRepository
         name: prometheus-community
   values:
+    # 0. Chart components that do not exist on K3s.
+    #
+    # 2026-09-12: KubeControllerManagerDown, KubeSchedulerDown and
+    # KubeProxyDown fired as `critical` every hour, forever, and had done
+    # since the stack was installed. None of them described a real fault.
+    #
+    # K3s does not run these as separate pods -- kube-controller-manager,
+    # kube-scheduler and kube-proxy are goroutines inside the single `k3s
+    # server` / `k3s agent` process, and this cluster's datastore is
+    # SQLite, so there is no etcd either. The chart's ServiceMonitors
+    # therefore selected nothing: Prometheus had zero active targets in
+    # all four scrape pools. The alert expressions are
+    # `absent(up{job="kube-scheduler"} == 1)`, so "no targets" is
+    # indistinguishable from "the component is down" and they latch on
+    # permanently.
+    #
+    # Turning the components off removes both halves of the problem --
+    # the ServiceMonitor that can never resolve and the *Down rule that
+    # reads its absence as an outage. Verified against the chart at
+    # 66.7.1: each rules-1.14/kubernetes-system-*.yaml gates its whole
+    # file on the matching `.Values.<component>.enabled`, so this toggle
+    # drops the PrometheusRule too, not just the scrape config.
+    #
+    # The control plane is still monitored: it lives in the k3s process
+    # on thinkcentre01, and the apiserver and kubelet targets (which do
+    # work) cover it.
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+    kubeEtcd:
+      enabled: false
+
+    # Individually disabled default rules.
+    defaultRules:
+      disabled:
+        # Both of these ask "if I lost my largest node, would the
+        # remaining nodes still fit every pod's requests?" That is a
+        # sensible question on a 10-node cluster and a meaningless one
+        # here: with 2 identical nodes, losing one halves the cluster,
+        # so the check is `requests > one node's worth`. Measured
+        # 2026-09-12: 4.86 CPU requested against 4.0 allocatable on a
+        # single node, 10.96Gi memory against 7.65Gi. Both conditions
+        # are permanently true and cannot be made false without either
+        # a third node or cutting requests in half.
+        #
+        # Node-level pressure is still covered, by NodeMemoryCritical
+        # and NodeSwapThrashing in reliability-alerts.yaml, which
+        # measure what is actually happening rather than what would
+        # happen in a hypothetical node loss.
+        KubeCPUOvercommit: true
+        KubeMemoryOvercommit: true
+
     # 1. Grafana Configuration
     grafana:
       service:

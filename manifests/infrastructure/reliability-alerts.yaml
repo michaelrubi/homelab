@@ -58,8 +58,23 @@ spec:
           # Catches the wedged-on-a-volume case directly. The Postgres dump
           # pod sat Pending for 5d12h retrying an NFS mount that was never
           # going to succeed, because the export on thinkcentre02 did not
-          # permit it. Nothing in the default ruleset notices a Pending pod.
-          expr: kube_pod_status_phase{phase="Pending"} == 1
+          # permit it.
+          #
+          # Scoped to Job-owned pods, which is the exact gap in the default
+          # ruleset. Upstream's KubePodNotReady already alerts on a pod
+          # stuck Pending for 15m, but its expression carries
+          # `kube_pod_owner{owner_kind!="Job"}` -- so a Deployment or
+          # StatefulSet pod is covered and a CronJob pod, the case that
+          # actually bit us, is not.
+          #
+          # 2026-09-12: without this `unless`, one broken pod arrived as
+          # three separate notifications -- forgejo-runner-0 produced
+          # KubePodNotReady, KubeContainerWaiting and PodPendingTooLong
+          # for a single missing Secret. The complement below leaves
+          # exactly one owner of each case.
+          expr: |
+            kube_pod_status_phase{phase="Pending"} == 1
+            unless on (namespace, pod) kube_pod_owner{owner_kind!="Job"}
           for: 30m
           labels:
             severity: warning
@@ -88,17 +103,31 @@ spec:
               workloads have drifted onto one node:
               kubectl get pods -A -o wide --field-selector spec.nodeName={{ $labels.instance }}
 
-        - alert: NodeSwapInUse
-          # These nodes should never touch swap. Sustained swap use is the
-          # earliest honest signal that a node is oversubscribed -- it
-          # precedes the probe timeouts by hours.
-          expr: (node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) > 512 * 1024 * 1024
-          for: 30m
+        - alert: NodeSwapThrashing
+          # Was NodeSwapInUse, which alerted on resident swap above
+          # 512Mi. That turned out to measure history, not health.
+          #
+          # 2026-09-12: thinkcentre01 held 1.4GiB in swap left over from
+          # the Sep 6-11 memory crunch, so the rule fired on every
+          # evaluation and kept firing -- the kernel never pages anything
+          # back in unless something touches it, so resident swap only
+          # falls on a reboot or a `swapoff`. Meanwhile the node was
+          # healthy: 23% memory available, pswpout flat at 0 pages/s.
+          # An alert that cannot clear once it fires is a permanent
+          # notification, and a permanent notification is ignored.
+          #
+          # Paging *rate* is the honest signal. Swapping out at half a
+          # megabyte a second, sustained for 15 minutes, means the node
+          # is actively reclaiming to stay alive; that precedes probe
+          # timeouts and it resolves on its own when the pressure lifts.
+          expr: rate(node_vmstat_pswpout[15m]) * 4096 > 512 * 1024
+          for: 15m
           labels:
             severity: warning
           annotations:
-            summary: "{{ $labels.instance }} is swapping ({{ $value | humanize1024 }}B in use)"
+            summary: "{{ $labels.instance }} is swapping out ({{ $value | humanize1024 }}B/s sustained)"
             description: >-
-              Sustained swap use means memory requests no longer reflect
-              reality on this node. Compare requests against actual usage
-              before the node starts thrashing.
+              The node is actively paging to disk, which means memory
+              requests no longer reflect reality here. Compare requests
+              against actual usage before it starts thrashing:
+              kubectl top pods -A --sort-by=memory

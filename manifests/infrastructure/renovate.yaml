@@ -6,8 +6,22 @@ metadata:
 spec:
   schedule: "0 * * * *" # Runs every hour
   concurrencyPolicy: Forbid
+
+  # 2026-09-12: KubeJobFailed had been firing on renovate-29791560 for
+  # 19 days. The default failedJobsHistoryLimit of 1 keeps the most
+  # recent failure forever, and `kube_job_failed > 0` has no age bound,
+  # so a single bad run becomes a permanent hourly notification long
+  # after the cause is gone.
+  #
+  # ttlSecondsAfterFinished retires a finished Job after a day, which is
+  # long enough to notice and investigate it. If the job is still broken
+  # the next hourly run fails too and the alert comes straight back --
+  # what clears is the zombie, not the signal.
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 86400
       template:
         spec:
           containers:
