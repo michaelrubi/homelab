@@ -188,21 +188,38 @@ spec:
               group_interval: 5m
               repeat_interval: 5m
 
-            # Critical alerts re-notify aggressively.
-            - receiver: ntfy
+            # Critical alerts re-notify aggressively, and are the only
+            # ones worth a "this cleared" message. See ntfy-critical.
+            - receiver: ntfy-critical
               matchers:
                 - severity = "critical"
               continue: false
               repeat_interval: 1h
 
         receivers:
+          # NOTE: the ntfy URL below is a capability -- anyone who knows
+          # the topic can read these alerts and publish to it. The topic is
+          # random for that reason. ntfy.sh free tier cannot reserve topics
+          # or require auth; if you want that, self-host ntfy or move this
+          # block to a sops-encrypted alertmanager configSecret.
+
           - name: ntfy
             webhook_configs:
-              # NOTE: this URL is a capability -- anyone who knows the topic
-              # can read these alerts and publish to it. The topic is random
-              # for that reason. ntfy.sh free tier cannot reserve topics or
-              # require auth; if you want that, self-host ntfy or move this
-              # block to a sops-encrypted alertmanager configSecret.
+              # 2026-09-12: send_resolved was true on every path, so each
+              # warning cost two notifications -- one to say a disk was
+              # filling, one to say it wasn't any more. For a warning the
+              # second message carries almost nothing: nobody acted on the
+              # first, and the condition cleared on its own. Dropping it
+              # halves the volume on the noisiest route.
+              - url: https://ntfy.sh/homelab-alerts-b5b04a9b1190a542
+                send_resolved: false
+                max_alerts: 0
+
+          - name: ntfy-critical
+            webhook_configs:
+              # Critical keeps send_resolved. Here the second message is
+              # the point: if something woke you at 03:00, you want to know
+              # it recovered without having to open Grafana to find out.
               - url: https://ntfy.sh/homelab-alerts-b5b04a9b1190a542
                 send_resolved: true
                 max_alerts: 0
@@ -227,3 +244,27 @@ spec:
           - source_matchers: [severity = "warning"]
             target_matchers: [severity = "info"]
             equal: [namespace, alertname]
+
+          # 2026-09-12: the two rules below are chart defaults that this
+          # hand-written inhibit_rules block silently replaced. Dropping
+          # them broke InfoInhibitor in both directions.
+          #
+          # InfoInhibitor is a synthetic alert -- `ALERTS{severity="info"}
+          # unless on(namespace) ALERTS{severity=~"warning|critical"}` --
+          # that exists purely to be a source for the first rule. It is
+          # never meant to reach a receiver. But it carries severity
+          # "none", so it matched neither the Watchdog route nor the
+          # critical route and fell through to ntfy, arriving on the phone
+          # as an alert named "InfoInhibitor" with no description. It also
+          # flaps by construction, appearing and clearing with every
+          # transient info alert.
+          #
+          # First rule: let InfoInhibitor do its job, suppressing info
+          # alerts in a namespace that has nothing worse going on.
+          # Second rule: no source_matchers means every alert is a source,
+          # and Watchdog always fires -- so InfoInhibitor is permanently
+          # inhibited and can never notify. That is the intent upstream.
+          - source_matchers: [alertname = "InfoInhibitor"]
+            target_matchers: [severity = "info"]
+            equal: [namespace]
+          - target_matchers: [alertname = "InfoInhibitor"]
