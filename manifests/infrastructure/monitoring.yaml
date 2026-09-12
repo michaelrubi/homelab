@@ -33,6 +33,12 @@ spec:
         type: LoadBalancer
         port: 8084
 
+      # Same RWO reasoning as the postgres Deployment: one replica on a
+      # ReadWriteOnce Longhorn volume cannot roll without deadlocking on
+      # Multi-Attach. The chart defaults to RollingUpdate.
+      deploymentStrategy:
+        type: Recreate
+
       # Persist Dashboards & Users using Longhorn
       persistence:
         enabled: true
@@ -66,14 +72,26 @@ spec:
         retention: 15d
         retentionSize: 12GiB
 
-        # Resource limits to prevent OOM kills
+        # 2026-09-12: the 1000m CPU limit made recovery pathological. On
+        # restart Prometheus must replay the WAL, and with 6188 segments
+        # it sat pegged at the limit -- cgroup cpu.stat showed 703 of 1125
+        # periods throttled and 167s spent waiting on the throttle against
+        # only 81s of actual CPU. Replay was decelerating (3s -> 9s -> 24s
+        # per segment) and would have taken hours, during which there is no
+        # monitoring at all. A tight CPU limit on the component that has to
+        # come back first after an incident is the wrong trade.
+        #
+        # Memory raised too: the in-memory head grows throughout replay,
+        # and an OOM kill mid-replay means starting over from segment 0 --
+        # a loop that never converges. Request reflects real steady-state
+        # use rather than the old optimistic 512Mi.
         resources:
           requests:
-            memory: 512Mi
+            memory: 1Gi
             cpu: 250m
           limits:
-            memory: 2Gi
-            cpu: 1000m
+            memory: 3Gi
+            cpu: "2"
 
     # 3. Alertmanager Configuration
     alertmanager:

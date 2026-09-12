@@ -33,6 +33,14 @@ metadata:
   namespace: default
 spec:
   replicas: 1
+  # A single-replica Deployment on a ReadWriteOnce volume MUST use
+  # Recreate. With the default RollingUpdate, Kubernetes starts the new
+  # pod before terminating the old one, the new pod cannot attach a
+  # volume the old one still holds, and the rollout deadlocks on
+  # "Multi-Attach error" -- which is exactly what happened on
+  # 2026-09-12 when adding resource requests triggered a rollout.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres
