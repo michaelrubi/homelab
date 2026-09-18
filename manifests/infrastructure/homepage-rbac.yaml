@@ -4,6 +4,11 @@ metadata:
   name: homepage
   namespace: default
 ---
+# NOTE: this grant is currently unused. Homepage's Kubernetes widget is what
+# needs it, and homepage-config.yaml sets `kubernetes.yaml: []`, i.e. the
+# widget is off -- so the ServiceAccount holds cluster-wide read on pods,
+# nodes, services and workloads that nothing exercises. Either enable the
+# widget or drop this binding; leaving it is standing privilege for no feature.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

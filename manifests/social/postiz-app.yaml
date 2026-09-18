@@ -150,6 +150,7 @@ spec:
             # postiz-instagram-provider-js-configmap.yaml for the source
             # and postiz-app#1578 for the upstream bug. Remove both the
             # volume and this mount once upstream merges the fix.
+            # Re-checked 2026-09-18: #1578 is still open, patch still needed.
             - name: ig-scope-patch
               subPath: instagram-provider.js
               mountPath: /app/apps/backend/dist/libraries/nestjs-libraries/src/integrations/social/instagram.provider.js

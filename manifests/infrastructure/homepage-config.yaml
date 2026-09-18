@@ -1,3 +1,16 @@
+# Homepage configuration.
+#
+# The empty stanzas below (kubernetes.yaml: [], docker.yaml: [], radarr.yaml:
+# [] ...) look like dead weight but are load-bearing. This ConfigMap is mounted
+# at /app/config, and a ConfigMap mount is read-only -- verified 2026-09-18,
+# `touch /app/config/x` returns EROFS. Homepage creates its default config
+# files at startup when they are missing, which it cannot do here, so every
+# file it expects has to be supplied. Deleting them makes Homepage fail to
+# initialise, not merely tidier.
+#
+# The href values mix templated {{HOMEPAGE_VAR_*}} (resolved from Secrets) with
+# hardcoded tailnet hostnames. The tailnet name is mildly identifying for a
+# public repo; moving the remaining literals into Secrets would close that.
 apiVersion: v1
 kind: ConfigMap
 metadata:
