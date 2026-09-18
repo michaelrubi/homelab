@@ -1,6 +1,7 @@
 {
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": [
-        "config:base"
+        "config:recommended"
     ],
     "ignoreUnstable": true,
     "assignees": [
@@ -9,20 +10,38 @@
     "reviewers": [
         "michael"
     ],
+    "timezone": "America/Phoenix",
     "kubernetes": {
-        "fileMatch": [
-            "\\.yaml$"
+        "description": "Scoped to manifests/. The previous '\\.yaml$' matched every YAML in the repo, including docs/postiz-research/ and the 10k-line generated gotk-components.yaml.",
+        "managerFilePatterns": [
+            "/^manifests/.+\\.yaml$/"
+        ]
+    },
+    "flux": {
+        "description": "Tracks HelmRelease chart versions, which were previously invisible to Renovate.",
+        "managerFilePatterns": [
+            "/^manifests/.+\\.yaml$/",
+            "/^clusters/.+\\.yaml$/"
         ]
     },
     "packageRules": [
         {
+            "description": "Nothing automerges. Every change lands via a PR that is reviewed, because Flux applies it to the cluster within 60s of merge.",
             "matchUpdateTypes": [
+                "major",
                 "minor",
                 "patch",
                 "pin",
                 "digest"
             ],
             "automerge": false
+        },
+        {
+            "description": "Our own app; :latest plus imagePullPolicy Always is the deploy mechanism, not a dependency to track.",
+            "matchPackageNames": [
+                "mrubi86/torrenter"
+            ],
+            "enabled": false
         }
     ]
 }

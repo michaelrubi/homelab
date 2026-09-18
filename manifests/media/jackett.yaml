@@ -53,7 +53,7 @@ spec:
       containers:
       # --- JACKETT CONTAINER ---
       - name: jackett
-        image: lscr.io/linuxserver/jackett:latest
+        image: lscr.io/linuxserver/jackett:v0.24.2581-ls27
         ports:
         - containerPort: 9117
         resources:
@@ -88,7 +88,7 @@ spec:
       
       # --- FLARESOLVERR SIDECAR ---
       - name: flaresolverr
-        image: flaresolverr/flaresolverr:latest
+        image: flaresolverr/flaresolverr:v3.5.2
         ports:
         - containerPort: 8191
           name: flaresolverr

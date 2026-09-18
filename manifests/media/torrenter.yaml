@@ -20,6 +20,12 @@ spec:
     spec:
       containers:
       - name: torrenter
+        # Deliberately :latest, unlike every other image here. This is our own
+        # app and :latest + Always is the deploy mechanism -- push an image,
+        # restart the pod. Renovate cannot track it either way (it is not
+        # upstream), and the supply-chain argument for pinning does not apply
+        # to an image we build ourselves. The registry publishes no semver
+        # tags, only :latest and a stale commit sha.
         image: mrubi86/torrenter:latest
         imagePullPolicy: Always
         ports:
