@@ -2,6 +2,8 @@
 #
 # Architecture (mirrors upstream docker-compose.yaml lines 200-269):
 #   postiz-temporal-postgres    — postgres:16 holds workflow history (5Gi PVC)
+#   postiz-temporal-elasticsearch — query accelerator for Temporal visibility
+#                                   (emptyDir, history lives in postgres)
 #   postiz-temporal             — temporalio/auto-setup:1.28.1 server
 #   postiz-temporal-admin-tools — debug CLI container (interactive, no Service)
 #   postiz-temporal-ui          — Temporal web UI on :8080
@@ -126,6 +128,85 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: postiz-temporal-elasticsearch
+  namespace: default
+spec:
+  selector:
+    app: postiz-temporal-elasticsearch
+  ports:
+    - port: 9200
+      targetPort: 9200
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postiz-temporal-elasticsearch
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postiz-temporal-elasticsearch
+  template:
+    metadata:
+      labels:
+        app: postiz-temporal-elasticsearch
+    spec:
+      containers:
+        - name: elasticsearch
+          image: elasticsearch:7.17.27
+          ports:
+            - containerPort: 9200
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: "-Xms256m -Xmx256m"
+            # Match upstream docker-compose — refuse to start when disk is low
+            - name: cluster.routing.allocation.disk.threshold_enabled
+              value: "true"
+            - name: cluster.routing.allocation.disk.watermark.low
+              value: 512mb
+            - name: cluster.routing.allocation.disk.watermark.high
+              value: 256mb
+            - name: cluster.routing.allocation.disk.watermark.flood_stage
+              value: 128mb
+          resources:
+            requests:
+              # Measured at ~547Mi steady-state on 2026-09-11, above the
+              # old 384Mi request. Raised so the scheduler accounts for it.
+              memory: "640Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+      volumes:
+        # emptyDir — ES is a query accelerator, history lives in postgres.
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: postiz-temporal
   namespace: default
 spec:
@@ -154,8 +235,8 @@ spec:
         app: postiz-temporal
     spec:
       initContainers:
-        # Wait for postgres before starting the temporal server, otherwise its
-        # initial schema setup fails.
+        # Wait for postgres + elasticsearch to be ready before starting the
+        # temporal server, otherwise it fails its initial schema setup.
         - name: wait-for-postgres
           image: postgres:16-alpine
           command:
@@ -164,6 +245,15 @@ spec:
             - |
               until pg_isready -h postiz-temporal-postgres -U temporal -d temporal; do
                 echo "waiting for temporal postgres..."; sleep 2;
+              done
+        - name: wait-for-elasticsearch
+          image: curlimages/curl:8.10.1
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf http://postiz-temporal-elasticsearch:9200/_cluster/health; do
+                echo "waiting for temporal elasticsearch..."; sleep 2;
               done
       containers:
         - name: temporal
@@ -189,24 +279,12 @@ spec:
               value: postiz-temporal-postgres
             - name: DYNAMIC_CONFIG_FILE_PATH
               value: /etc/temporal/config/dynamicconfig/development-sql.yaml
-            # 2026-09-18: was ENABLE_ES=true against a dedicated Elasticsearch
-            # pod. ES was only ever the *visibility* index -- workflow history
-            # lives in Postgres -- and it cost 640Mi of requests (539Mi
-            # measured) on a node already at 87%. Temporal supports SQL
-            # visibility on Postgres 12+, which is what auto-setup builds when
-            # ENABLE_ES is false.
-            #
-            # auto-setup creates and schema-inits VISIBILITY_DBNAME on start;
-            # the database did not exist before this change, since ES was
-            # handling visibility. The 24 records that were in the ES index are
-            # not migrated -- they are a searchable index of already-completed
-            # workflows, not the workflows themselves.
             - name: ENABLE_ES
-              value: "false"
-            - name: DBNAME
-              value: temporal
-            - name: VISIBILITY_DBNAME
-              value: temporal_visibility
+              value: "true"
+            - name: ES_SEEDS
+              value: postiz-temporal-elasticsearch
+            - name: ES_VERSION
+              value: v7
             - name: TEMPORAL_NAMESPACE
               value: default
           volumeMounts:
@@ -242,10 +320,8 @@ metadata:
   name: postiz-temporal-admin-tools
   namespace: default
 spec:
-  # Scaled to 0. This is an interactive debug shell (`sleep infinity`) with no
-  # Service; it served no traffic while running 24/7. Bring it up when needed:
+  # Scaled to 0. Interactive debug shell (`sleep infinity`), no Service.
   #   kubectl scale deploy/postiz-temporal-admin-tools --replicas=1
-  #   kubectl exec -it deploy/postiz-temporal-admin-tools -- tctl ...
   replicas: 0
   selector:
     matchLabels:
