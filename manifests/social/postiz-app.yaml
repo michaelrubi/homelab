@@ -77,6 +77,34 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+      # Wait for Temporal's gRPC port before starting. The backend calls
+      # TemporalRegister.onModuleInit -> listSearchAttributes during NestJS
+      # init and does NOT retry: if Temporal is not reachable at that moment
+      # the backend dies, the frontend then fails with ECONNREFUSED on
+      # 127.0.0.1:3000, and the pod sits at 1/2 with the readiness probe
+      # returning 500 until something restarts it.
+      #
+      # Observed 2026-09-18, when postiz and Temporal rolled at the same time
+      # and postiz won the race. It would recur on any Temporal restart and on
+      # every kured reboot. This mirrors the wait-for-postgres guard that
+      # postiz-temporal.yaml already uses for the same class of problem.
+      initContainers:
+        - name: wait-for-temporal
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postiz-temporal 7233; do
+                echo "waiting for temporal frontend..."; sleep 2;
+              done
+              echo "temporal is up"
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
       imagePullSecrets:
         # Pulls ghcr.io/rubiconetic/postiz-ai-proxy from a private GHCR
         # package. The postiz main image is public GHCR (gitroomhq) and
@@ -122,12 +150,30 @@ spec:
               # plus Prisma first-run schema push which spikes to ~3Gi during
               # the initial db push on a fresh database. 4Gi gives headroom.
               memory: "4Gi"
+          # startupProbe gates the other two. Without it, liveness allowed
+          # 60s + 6x30s = 240s total, and a cold start here exceeds that:
+          # nginx answers 500 until the NestJS backend is listening on :3000,
+          # and that bootstrap covers Prisma, a large module graph and the
+          # Temporal handshake. Observed 2026-09-18 -- the container was
+          # SIGKILLed mid-boot (exit 137) by liveness and restarted, which
+          # only makes the next start slower.
+          #
+          # While a startupProbe is failing, liveness and readiness do not run
+          # at all, so the app gets up to 10 minutes to come up; once it
+          # succeeds, liveness resumes at its normal cadence and still catches
+          # a genuine hang.
+          startupProbe:
+            httpGet:
+              path: /
+              port: 5000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           livenessProbe:
             # nginx on :5000 is the public surface — probe that.
             httpGet:
               path: /
               port: 5000
-            initialDelaySeconds: 60
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 6
