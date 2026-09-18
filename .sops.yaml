@@ -1,0 +1,23 @@
+# SOPS encryption rules for this repo.
+#
+# Without this file the age recipient and the encrypted_regex live only inside
+# files that are already encrypted, so adding a new secret means remembering
+# both flags by hand -- and getting it wrong commits plaintext to a public
+# repo. That is exactly how the Kaneo Postgres password ended up inline in
+# manifests/productivity/kaneo.yaml (fixed 2026-09-18, commit 87cb13f).
+#
+# With this file present, `sops -e -i manifests/secrets/<file>.sops.yaml`
+# picks up the right recipient and regex automatically.
+#
+# encrypted_regex leaves metadata (name, namespace, type) readable so Flux and
+# kustomize can route the resource without decrypting it; only the secret
+# payload is ciphertext.
+creation_rules:
+  - path_regex: manifests/secrets/.*\.sops\.ya?ml$
+    encrypted_regex: '^(data|stringData)$'
+    age: age1qf4h0dz5mjzx75vj4dl9ak6uvuq8ucujhsnc52scdrxp400lu4jqajyxmj
+
+  # Catch-all: anything else named *.sops.yaml anywhere in the repo.
+  - path_regex: .*\.sops\.ya?ml$
+    encrypted_regex: '^(data|stringData)$'
+    age: age1qf4h0dz5mjzx75vj4dl9ak6uvuq8ucujhsnc52scdrxp400lu4jqajyxmj
