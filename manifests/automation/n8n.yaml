@@ -35,6 +35,8 @@ spec:
       # Permissions fix for Longhorn volumes
       securityContext:
         fsGroup: 1000
+        # See the fsGroup note in manifests/kustomization.yaml.
+        fsGroupChangePolicy: OnRootMismatch
         runAsUser: 1000
         runAsGroup: 1000
 

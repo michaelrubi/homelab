@@ -51,6 +51,8 @@ spec:
     spec:
       securityContext:
         fsGroup: 999
+        # See the fsGroup note in manifests/kustomization.yaml.
+        fsGroupChangePolicy: OnRootMismatch
       containers:
       - name: postgres
         # Deliberately postgres:16, NOT postgres:16-alpine, even though every

@@ -48,6 +48,8 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+        # See the fsGroup note in manifests/kustomization.yaml.
+        fsGroupChangePolicy: OnRootMismatch
       # Was `nodeName: thinkcentre01`. nodeName bypasses the scheduler
       # entirely: no resource accounting, and a cordoned node still accepts
       # the replacement pod -- so the weekly kured drain in kured.yaml could

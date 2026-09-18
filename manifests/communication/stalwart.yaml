@@ -144,6 +144,8 @@ spec:
     spec:
       securityContext:
         fsGroup: 2000
+        # See the fsGroup note in manifests/kustomization.yaml.
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: stalwart
           image: stalwartlabs/stalwart:v0.16

@@ -84,6 +84,32 @@ spec:
 
     # 1. Grafana Configuration
     grafana:
+      # 2026-09-18: the chart ships no resource requests, so Grafana ran as
+      # BestEffort -- first in line for the OOM killer under node pressure,
+      # and invisible to the scheduler despite measuring 271Mi. Same failure
+      # the reloader chart had (see reloader.yaml). Request reflects measured
+      # use plus headroom; memory limit per the policy in kustomization.yaml.
+      resources:
+        requests:
+          memory: "320Mi"
+          cpu: "50m"
+        limits:
+          memory: "512Mi"
+
+      # Prefer node02, soft. Grafana is human-facing and queried
+      # intermittently, so the cross-node hop to Prometheus costs little, and
+      # moving it keeps node01 from re-tilting now that its 320Mi is declared.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - thinkcentre02
+
       service:
         type: LoadBalancer
         port: 8084
@@ -99,6 +125,33 @@ spec:
         enabled: true
         storageClassName: longhorn
         size: 2Gi
+
+    # Chart components that also ship without resource requests. All three
+    # measured 2026-09-18: kube-state-metrics 30Mi, operator 45Mi,
+    # node-exporter 16-18Mi per node.
+    kube-state-metrics:
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "25m"
+        limits:
+          memory: "192Mi"
+
+    prometheusOperator:
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "25m"
+        limits:
+          memory: "192Mi"
+
+    prometheus-node-exporter:
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "10m"
+        limits:
+          memory: "96Mi"
 
     # 2. Prometheus Configuration
     prometheus:

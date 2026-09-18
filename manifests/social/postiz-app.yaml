@@ -77,6 +77,8 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+        # See the fsGroup note in manifests/kustomization.yaml.
+        fsGroupChangePolicy: OnRootMismatch
       # Wait for Temporal's gRPC port before starting. The backend calls
       # TemporalRegister.onModuleInit -> listSearchAttributes during NestJS
       # init and does NOT retry: if Temporal is not reachable at that moment

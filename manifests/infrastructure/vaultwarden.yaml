@@ -34,6 +34,8 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+        # See the fsGroup note in manifests/kustomization.yaml.
+        fsGroupChangePolicy: OnRootMismatch
       containers:
       - name: vaultwarden
         image: vaultwarden/server:1.37.3

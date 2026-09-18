@@ -15,6 +15,26 @@
 # So: adding a workload, set requests for both, and a memory limit. Do not add
 # a CPU limit.
 
+# Volume ownership: fsGroupChangePolicy: OnRootMismatch
+#
+# Any pod with fsGroup and a volume gets one. The default, Always, makes
+# kubelet walk the entire volume and chown every file on every single pod
+# start -- time proportional to file count, not data size, so a Forgejo repo
+# volume full of small git objects is the worst case.
+#
+# Observed 2026-09-18 during a full rollout: Forgejo sat in Init for minutes
+# and kubelet emitted VolumePermissionChangeInProgress, recommending exactly
+# this setting. It is paid on every rollout and on every kured reboot, which
+# is weekly.
+#
+# OnRootMismatch chowns only when the volume ROOT's ownership is already
+# wrong, i.e. the first attach. The tradeoff: if files below the root have
+# wrong ownership but the root is correct, it will not repair them. That is
+# fine here -- these volumes are already correctly owned, and the workloads
+# that were fussy about it (forgejo, n8n, the runner) also run an explicit
+# chown init container. If you ever restore a volume from a backup with
+# foreign ownership, set this back to Always for one boot.
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
