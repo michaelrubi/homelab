@@ -16,7 +16,7 @@ spec:
       serviceAccountName: homepage
       containers:
         - name: homepage
-          image: ghcr.io/gethomepage/homepage:v2.3.0
+          image: ghcr.io/gethomepage/homepage:v2.4.0
           ports:
             - containerPort: 3000
           # 2026-09-11: had no requests at all, so the scheduler counted

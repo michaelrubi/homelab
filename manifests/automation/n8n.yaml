@@ -114,7 +114,7 @@ spec:
 
       containers:
       - name: n8n
-        image: docker.n8n.io/n8nio/n8n:2.30.4
+        image: docker.n8n.io/n8nio/n8n:2.40.3
         ports:
         - containerPort: 5678
         resources:
