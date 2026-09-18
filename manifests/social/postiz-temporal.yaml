@@ -154,6 +154,26 @@ spec:
       labels:
         app: postiz-temporal-elasticsearch
     spec:
+      # Prefer node02. Soft (preferred, not required): if node02 is down or
+      # full this still schedules on node01 rather than going Pending.
+      #
+      # Placement had drifted almost entirely onto node01 -- 6292Mi of
+      # requests (80%) against node02's 2848Mi (36%), on identical hardware.
+      # Kubernetes never moves a running pod, and ImageLocality scoring keeps
+      # pulling reschedules back to node01, which has had every image cached
+      # since the cluster was built. This workload has no PersistentVolumeClaim,
+      # its only volume is an emptyDir, and node02 already has the
+      # elasticsearch image cached, so this move is cheap in both directions.
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - thinkcentre02
       containers:
         - name: elasticsearch
           image: elasticsearch:7.17.27

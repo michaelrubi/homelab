@@ -149,6 +149,26 @@ spec:
 
     # 3. Alertmanager Configuration
     alertmanager:
+      alertmanagerSpec:
+        # Prefer node02. Soft, so a node02 outage does not leave alerting
+        # Pending -- which would be the worst possible time to lose it.
+        #
+        # Placement had drifted almost entirely onto node01 (80% of its memory
+        # requests vs 36% on identical hardware), and Kubernetes never moves a
+        # running pod. Alertmanager has no persistence configured here, so
+        # relocating it costs a restart and nothing else. Prometheus itself
+        # stays on node01: it has a 20Gi Longhorn volume and is the component
+        # that most needs to come back fast after an incident.
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - thinkcentre02
       config:
         global:
           resolve_timeout: 5m
