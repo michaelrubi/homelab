@@ -53,6 +53,16 @@ spec:
         fsGroup: 999
       containers:
       - name: postgres
+        # Deliberately postgres:16, NOT postgres:16-alpine, even though every
+        # other Postgres here is alpine. The data directory was initialised by
+        # a glibc build; alpine is musl, and the two disagree on text
+        # collation. Same major means the files mount fine, so this fails
+        # silently -- existing btree indexes on text columns stay ordered by
+        # glibc rules while the server compares by musl rules, and queries
+        # start missing rows with no error anywhere.
+        #
+        # Switching is a dump/restore (or a REINDEX of every text index), not
+        # a tag edit. The ~150MB of extra image size is the cheaper option.
         image: postgres:16
         ports:
         - containerPort: 5432

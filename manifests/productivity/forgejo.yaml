@@ -75,6 +75,15 @@ spec:
       containers:
         # --- Postgres ---
         - name: postgres
+          # DO NOT bump this major version by editing the tag. The data
+          # directory on forgejo-db-pvc is PG_VERSION=14; Postgres refuses to
+          # start against files from an older major ("database files are
+          # incompatible with server"), and Forgejo is Flux's own git source,
+          # so that failure takes GitOps down with it.
+          #
+          # A real upgrade is: scale to 0, pg_dumpall from a 14 sidecar onto
+          # the NFS share, delete the PVC, recreate at the new major, restore,
+          # scale back up. 14 is EOL Nov 2026, so this is worth scheduling.
           image: postgres:14-alpine
           env:
             - name: PGDATA
