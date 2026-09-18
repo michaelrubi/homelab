@@ -29,9 +29,9 @@ spec:
               image: renovate/renovate:latest
               imagePullPolicy: IfNotPresent
               env:
-                # Tell Renovate we are using Forgejo (uses Gitea platform logic)
+                # Tell Renovate we are using Forgejo
                 - name: RENOVATE_PLATFORM
-                  value: "gitea"
+                  value: "forgejo"
 
                 # Internal K8s Service URL (Fast & Secure)
                 # Note: We append /api/v1 for the Renovate endpoint
@@ -45,7 +45,7 @@ spec:
                 # Extend this list to add more repos.
                 - name: RENOVATE_AUTODISCOVER
                   value: "false"
-                - name: RENOVATE_REPOS
+                - name: RENOVATE_REPOSITORIES
                   value: '["michael/homelab"]'
 
                 # The Identity used for commits
