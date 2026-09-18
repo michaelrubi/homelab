@@ -9,13 +9,16 @@
 # by the entrypoint (it just appends "/api"). We still set it explicitly
 # via Secret so the value is obvious in `kubectl describe`.
 #
-# DATABASE_URL is also set explicitly on the Deployment (not via Secret)
-# because the Postgres password is colocated with the connection string
-# in kaneo-postgres-pvc (which the postgres pod initializes at first
-# boot from kaneo-db-secrets). If you rotate kaneo-db-secrets.POSTGRES_PASSWORD,
-# update this DATABASE_URL line in lockstep or the pod will fail with
-# "password authentication failed" — there is no rotating-credential
-# mechanism on first init.
+# DATABASE_URL comes from kaneo-secrets via envFrom, matching how
+# postiz-secrets carries its own DATABASE_URL. It used to be inline on the
+# Deployment, which put a live Postgres password in a public repo.
+#
+# Rotating the password is still a two-step operation, because POSTGRES_PASSWORD
+# only takes effect at first init — an already-initialized volume ignores it:
+#   1. ALTER USER kaneo WITH PASSWORD '<new>';  in the kaneo-postgres pod
+#   2. update BOTH kaneo-db-secrets.POSTGRES_PASSWORD and
+#      kaneo-secrets.DATABASE_URL in secrets.sops.yaml, in lockstep
+# Skip step 1 and the pod fails with "password authentication failed".
 #
 # Public hostname kaneo.rubiconetic.com is routed via the Cloudflare
 # tunnel dashboard → http://kaneo-service.default.svc.cluster.local:5173.
@@ -75,15 +78,7 @@ spec:
           envFrom:
             - secretRef:
                 name: kaneo-secrets
-          # DATABASE_URL — explicit. The entrypoint would derive this from
-          # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_HOST but we set it
-          # directly so the connection string is visible at a glance and
-          # immune to any future derivation logic changes. Password is
-          # urlencoded at write time (only [a-zA-Z0-9-_] used → no encoding
-          # actually needed, but the literal form is unambiguous).
           env:
-            - name: DATABASE_URL
-              value: "postgresql://kaneo:dY962fDmH7rqnmSKPA3YXOmIKTfmUbVUzD5UfQzq@kaneo-postgres:5432/kaneo"
             - name: POSTGRES_HOST
               value: "kaneo-postgres"
             - name: POSTGRES_PORT
