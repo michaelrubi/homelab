@@ -71,3 +71,50 @@ resources:
 - social/postiz-postgres.yaml
 - social/postiz-redis.yaml
 - social/postiz-temporal.yaml
+
+# ---------------------------------------------------------------------------
+# Placement: which workloads prefer thinkcentre02
+#
+# Two identical 8GB nodes, but placement had drifted almost entirely onto
+# node01 and would not self-correct: Kubernetes never relocates a running pod,
+# and ImageLocality scoring keeps pulling reschedules back to node01, which has
+# had every image cached since the cluster was built.
+#
+# 2026-09-18: steering four workloads was not enough. A full rollout (the
+# fsGroupChangePolicy change) restarted everything at once, and every pod
+# WITHOUT an explicit preference landed on node01 -- including postiz at
+# 2080Mi, which alone is 27% of a node. Result was 97% / 26%, worse than
+# before. With two nodes and one dominant workload, the balance hinges on that
+# workload, so it has to be declared rather than left to the scheduler mid-
+# rollout when "emptiest node" is whatever happens to be draining.
+#
+# Grouping is by application, not just by size, so each app sits with its own
+# database and the split does not add cross-node hops:
+#   node02  postiz + its whole stack (postgres, redis, temporal, temporal-
+#           postgres, elasticsearch), kaneo + kaneo-postgres, couchdb,
+#           homepage, torrenter  ... plus grafana and alertmanager, which are
+#           set in monitoring.yaml because they come from the Helm chart.
+#   node01  prometheus (20Gi volume, must recover fastest after an incident),
+#           forgejo + runner (nodeSelector-pinned, Flux's own git source),
+#           n8n + its postgres, stalwart, jackett, vaultwarden, flux itself.
+# Projected: roughly 61% / 62%.
+#
+# preferred, not required: if node02 is down these still schedule on node01
+# rather than going Pending.
+patches:
+  - target:
+      kind: Deployment
+      name: ^(postiz|postiz-postgres|postiz-redis|postiz-temporal|postiz-temporal-postgres|postiz-temporal-elasticsearch|kaneo|kaneo-postgres|couchdb)$
+    patch: |-
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - thinkcentre02
