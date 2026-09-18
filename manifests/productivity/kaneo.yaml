@@ -92,7 +92,6 @@ spec:
               # MCP server + croner cron jobs) plus nginx. First-run
               # Drizzle migrations can transiently spike; 2Gi gives headroom.
               memory: "2Gi"
-              cpu: "1000m"
           livenessProbe:
             # nginx on :5173 is the public surface; /api/health proxies to
             # the Hono API on :1337 inside the container.

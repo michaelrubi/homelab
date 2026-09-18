@@ -113,7 +113,6 @@ spec:
             cpu: "100m"
           limits:
             memory: "1Gi"
-            cpu: "1000m"
         volumeMounts:
         - name: couchdb-data
           mountPath: /opt/couchdb/data

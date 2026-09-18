@@ -64,7 +64,6 @@ spec:
             cpu: "50m"
           limits:
             memory: "1Gi"
-            cpu: "1000m"
         envFrom:
         - secretRef:
             name: n8n-db-secrets

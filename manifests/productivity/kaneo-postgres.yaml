@@ -66,7 +66,6 @@ spec:
               cpu: "100m"
             limits:
               memory: "512Mi"
-              cpu: "500m"
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "kaneo", "-d", "kaneo"]

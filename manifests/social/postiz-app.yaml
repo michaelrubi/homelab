@@ -122,7 +122,6 @@ spec:
               # plus Prisma first-run schema push which spikes to ~3Gi during
               # the initial db push on a fresh database. 4Gi gives headroom.
               memory: "4Gi"
-              cpu: "2000m"
           livenessProbe:
             # nginx on :5000 is the public surface — probe that.
             httpGet:
@@ -194,7 +193,6 @@ spec:
               cpu: "25m"
             limits:
               memory: "128Mi"
-              cpu: "200m"
           # 2026-09-11: these were httpGet on "/", which this sidecar does
           # NOT serve -- server.js is a single catch-all app.use() that
           # forwards every path upstream. So each probe made a real billed

@@ -62,7 +62,6 @@ spec:
             cpu: "100m"
           limits:
             memory: "1Gi"
-            cpu: "1000m"
         livenessProbe:
           tcpSocket:
             port: 9117
@@ -104,7 +103,6 @@ spec:
             cpu: "100m"
           limits:
             memory: "1024Mi"
-            cpu: "1000m"
         readinessProbe:
           httpGet:
             path: /

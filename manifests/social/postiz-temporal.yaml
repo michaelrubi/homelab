@@ -106,7 +106,6 @@ spec:
               cpu: "50m"
             limits:
               memory: "256Mi"
-              cpu: "300m"
           livenessProbe:
             exec:
               command: ["pg_isready", "-U", "temporal", "-d", "temporal"]
@@ -184,7 +183,6 @@ spec:
               cpu: "100m"
             limits:
               memory: "1Gi"
-              cpu: "500m"
           livenessProbe:
             httpGet:
               path: /_cluster/health
@@ -299,7 +297,6 @@ spec:
               cpu: "100m"
             limits:
               memory: "512Mi"
-              cpu: "500m"
           livenessProbe:
             tcpSocket:
               port: 7233
@@ -349,7 +346,6 @@ spec:
               cpu: "10m"
             limits:
               memory: "128Mi"
-              cpu: "100m"
 ---
 # Temporal web UI on :8080. ClusterIP only — port-forward to access:
 #   kubectl port-forward svc/postiz-temporal-ui 8080:8080
@@ -397,7 +393,6 @@ spec:
               cpu: "10m"
             limits:
               memory: "128Mi"
-              cpu: "100m"
           livenessProbe:
             httpGet:
               path: /

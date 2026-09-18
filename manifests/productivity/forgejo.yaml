@@ -48,7 +48,16 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
-      nodeName: thinkcentre01
+      # Was `nodeName: thinkcentre01`. nodeName bypasses the scheduler
+      # entirely: no resource accounting, and a cordoned node still accepts
+      # the replacement pod -- so the weekly kured drain in kured.yaml could
+      # never actually clear this workload off node01. nodeSelector keeps the
+      # same placement while letting cordon/drain work as intended.
+      # Nothing here is node-specific (Longhorn volumes attach from any node),
+      # so this pin can be dropped entirely once you're happy to let Forgejo
+      # move -- worth doing, since Forgejo is Flux's own git source.
+      nodeSelector:
+        kubernetes.io/hostname: thinkcentre01
       
       # --- ADDED: Fix permissions for Longhorn blank volume ---
       initContainers:
@@ -88,7 +97,6 @@ spec:
               cpu: "100m"
             limits:
               memory: "1Gi"
-              cpu: "1000m"
         # --- Forgejo ---
         - name: forgejo
           image: codeberg.org/forgejo/forgejo:15
@@ -131,7 +139,6 @@ spec:
               cpu: "200m"
             limits:
               memory: "2Gi"
-              cpu: "2000m"
       volumes:
         - name: db-data
           persistentVolumeClaim:
@@ -209,7 +216,9 @@ spec:
       labels:
         app: forgejo-runner
     spec:
-      nodeName: thinkcentre01
+      # See the note on the Forgejo Deployment above.
+      nodeSelector:
+        kubernetes.io/hostname: thinkcentre01
       volumes:
         - name: config
           configMap:
@@ -231,7 +240,6 @@ spec:
               cpu: "50m"
             limits:
               memory: "512Mi"
-              cpu: "1000m"
           command:
             - "/bin/sh"
             - "-c"
@@ -284,7 +292,6 @@ spec:
               cpu: "100m"
             limits:
               memory: "2Gi"
-              cpu: "2000m"
           securityContext:
             privileged: true
           env:

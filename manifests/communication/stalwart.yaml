@@ -204,7 +204,6 @@ spec:
               cpu: "200m"
             limits:
               memory: "2Gi"
-              cpu: "1000m"
           volumeMounts:
             - name: config
               mountPath: /etc/stalwart

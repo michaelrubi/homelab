@@ -27,7 +27,6 @@ spec:
               cpu: "50m"
             limits:
               memory: "384Mi"
-              cpu: "500m"
           env:
             - name: HOMEPAGE_ALLOWED_HOSTS
               value: "*"

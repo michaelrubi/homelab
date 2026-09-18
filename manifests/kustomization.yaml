@@ -1,3 +1,20 @@
+# Cluster-wide resource policy (2026-09-18)
+#
+# CPU: requests only, no limits. CPU is compressible -- when a node is
+# contended the kernel already shares it by request weight, so a limit adds
+# nothing but hard CFS throttling, and it throttles even when the node is
+# idle. The Prometheus note in infrastructure/monitoring.yaml worked this out
+# the expensive way: WAL replay pegged at its 1000m limit, 703 of 1125 periods
+# throttled, recovery decelerating toward hours. That reasoning was right and
+# applied to every workload here, not just Prometheus. Before this change CPU
+# limits summed to 577% of one node's capacity while the node ran at 29% CPU.
+#
+# Memory: requests AND limits. Memory is incompressible -- a limit is the only
+# thing standing between one leaking process and an OOM-killed node.
+#
+# So: adding a workload, set requests for both, and a memory limit. Do not add
+# a CPU limit.
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
