@@ -12,6 +12,32 @@ data:
 
     [couchdb]
     max_document_size = 4294967296
+    # Pin the server UUID -- this is the fix for "Obsidian sync dies every
+    # few days on every device at once" (diagnosed 2026-09-19).
+    #
+    # CouchDB generates a UUID at first start and persists it to the LAST
+    # file in its config chain, which is /opt/couchdb/etc/local.d/docker.ini
+    # (the entrypoint's file, sorted after this one). That directory is the
+    # couchdb-config-writable emptyDir below, so it is wiped on every pod
+    # start and CouchDB minted a brand-new random UUID each time.
+    #
+    # That is not cosmetic. PouchDB -- what Obsidian LiveSync runs -- derives
+    # its replication checkpoint id from server_uuid + db_name. A new UUID
+    # invalidates every device's checkpoint simultaneously and forces a full
+    # change-feed rescan, which reads to the user as "sync stopped working".
+    # Restarts here are frequent: kured reboots a node every Sunday, the
+    # reloader annotation restarts on any secret/configmap change, and Flux
+    # rolls on any manifest edit. That is the "every few days" cadence.
+    #
+    # The evidence was four _local checkpoint docs in the homelab db: two at
+    # rev 0-769 (the long-lived pre-restart pair) and two at rev 0-18/0-19
+    # minted after a recent rollout, with the live feed crawling history 25
+    # changes at a time.
+    #
+    # This value is the UUID that was live when the pin was added, so the
+    # rollout that applies it preserves the existing checkpoints. Do not
+    # change it -- changing it re-breaks every device.
+    uuid = 43f90d1dc4ee24124951503aec511e69
 
     [chttpd]
     enable_cors = true
@@ -91,6 +117,17 @@ spec:
             secretKeyRef:
               name: obsidian-secrets
               key: COUCHDB_PASSWORD
+        # Same emptyDir problem as the UUID above: without this the
+        # entrypoint has no value to write, so CouchDB generates the
+        # cookie-auth secret at runtime and loses it on every restart,
+        # invalidating any outstanding AuthSession cookie. LiveSync itself
+        # uses Basic auth, so this is belt-and-braces rather than the bug,
+        # but it makes the whole auth surface restart-stable.
+        - name: COUCHDB_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: obsidian-secrets
+              key: COUCHDB_SECRET
         ports:
         - containerPort: 5984
         lifecycle:
