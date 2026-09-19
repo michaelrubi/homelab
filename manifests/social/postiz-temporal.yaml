@@ -158,7 +158,7 @@ spec:
     spec:
       containers:
         - name: elasticsearch
-          image: elasticsearch:7.17.27
+          image: elasticsearch:7.17.28
           ports:
             - containerPort: 9200
           env:
