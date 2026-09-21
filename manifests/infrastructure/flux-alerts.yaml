@@ -79,6 +79,6 @@ spec:
               {{ $labels.kind }} {{ $labels.exported_namespace }}/{{ $labels.name }}
               has failed to reconcile for 30 minutes, so nothing it owns is
               being applied -- including changes pushed since. Read the reason
-              with: kubectl get {{ $labels.kind | lower }} {{ $labels.name }}
+              with: kubectl get {{ $labels.kind | toLower }} {{ $labels.name }}
               -n {{ $labels.exported_namespace }}
               -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
