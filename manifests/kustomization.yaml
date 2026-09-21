@@ -42,6 +42,8 @@ resources:
 - automation/n8n-service.yaml
 - automation/n8n.yaml
 - communication/stalwart.yaml
+- infrastructure/alert-router.yaml
+- infrastructure/alert-router-alerts.yaml
 - infrastructure/cloudflared.yaml
 - infrastructure/homepage-app.yaml
 - infrastructure/homepage-config.yaml

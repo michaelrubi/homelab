@@ -1,0 +1,370 @@
+# Alert router: a typed decision between Alertmanager and ntfy.
+#
+# The problem this solves is the one documented in monitoring.yaml and
+# reliability-alerts.yaml from both directions. Alerts went to receiver "null"
+# for five days and nobody noticed (2026-09-06 to 2026-09-11); the fix pointed
+# everything at one ntfy topic, which is correct but means the warning tier now
+# arrives on the phone at the same weight as a dead backup. A route that is
+# either "silent" or "everything" has no setting where a human keeps reading it.
+#
+# So: warnings pass through a classifier that decides page / digest / suppress,
+# and Jev (TypeSafe's decision model) supplies that decision as a typed answer
+# with a calibrated probability. Calibration is the whole reason it is Jev and
+# not a general LLM -- benchmarked 2026-09-20, a local 8B asked to emit its own
+# confidence returned 0.95 for every input including the ones it got wrong, so
+# gating on that number gates on nothing. Jev returned 0.25 to 1.00 and tracked
+# difficulty, which is what makes "only suppress when sure" mean something.
+#
+# WHAT THIS DOES NOT TOUCH, on purpose:
+#
+#   Watchdog -> deadmansswitch   The dead-man's-switch is the layer that
+#                                catches Prometheus itself dying. Putting a
+#                                classifier in front of it would reintroduce
+#                                exactly the single point of failure it exists
+#                                to cover. It stays wired direct.
+#
+#   severity=critical -> ntfy-critical
+#                                Critical always pages, unclassified, at full
+#                                volume. A backup that has not run in 36h is
+#                                not a judgement call.
+#
+# Only the default `ntfy` receiver -- warning and info, the tier that actually
+# firehoses -- is routed through here.
+#
+# FAIL-OPEN IS THE CENTRAL RULE. Every error path forwards the alert. Jev
+# unreachable, slow, rate-limited, returning something unparseable, key missing,
+# confidence below threshold: all of them page. The failure mode of this service
+# must be "as noisy as today", never "as silent as September 6". There is no
+# code path that drops an alert because something broke.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-router-app
+  namespace: monitoring
+data:
+  router.py: |
+    # Stdlib only, deliberately. This runs on the stock python:3.12-slim image
+    # with no pip install at startup, so the alert path has no dependency on
+    # PyPI being reachable when the pod restarts -- which, for the service that
+    # carries your alerts, is the difference between a slow start and a silent
+    # one.
+    import json, os, sys, threading, time, urllib.request, urllib.error
+    from collections import Counter, deque
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    JEV_URL   = os.environ.get("JEV_URL", "https://api.typesafe.ai/v1/systemone")
+    JEV_KEY   = os.environ.get("JEV_API_KEY", "")
+    NTFY_URL  = os.environ.get("NTFY_URL", "")
+    # Suppress only when Jev is at least this sure. Below it, the alert pages.
+    THRESHOLD = float(os.environ.get("SUPPRESS_CONFIDENCE", "0.85"))
+    TIMEOUT   = float(os.environ.get("JEV_TIMEOUT_SECONDS", "3"))
+    DIGEST_S  = int(os.environ.get("DIGEST_INTERVAL_SECONDS", "3600"))
+
+    M = Counter()
+    DIGEST = deque(maxlen=500)
+    LOCK = threading.Lock()
+
+    def log(**kw):
+        # One JSON object per line: `kubectl logs` is the audit trail for every
+        # suppression, and the corpus to fit a threshold on once there is a
+        # month of decisions to look at.
+        print(json.dumps({"ts": time.time(), **kw}), flush=True)
+
+    DISPOSITIONS = {
+        "page_now": "Someone must look at this within the hour: data loss, a "
+                    "backup not running, a service down, or something actively "
+                    "degrading.",
+        "digest":   "Real but not urgent. Worth seeing in a daily roundup: slow "
+                    "growth, a warning trending the wrong way, a soft limit.",
+        "suppress": "Noise. Transient, self-healing, a flap, or an artifact of "
+                    "monitoring rather than a fact about the cluster.",
+    }
+
+    def describe(payload):
+        """Flatten an Alertmanager group into something Jev can read."""
+        alerts = payload.get("alerts", [])
+        head = alerts[0] if alerts else {}
+        lab, ann = head.get("labels", {}), head.get("annotations", {})
+        return (
+            f"Alert: {lab.get('alertname','?')}\n"
+            f"Severity: {lab.get('severity','?')}\n"
+            f"Namespace: {lab.get('namespace','?')}\n"
+            f"Status: {payload.get('status','?')}\n"
+            f"Firing in group: {len(alerts)}\n"
+            f"Summary: {ann.get('summary','')}\n"
+            f"Description: {ann.get('description','')[:600]}"
+        )
+
+    def classify(state):
+        """(disposition, confidence, reason). Any failure returns page_now."""
+        if not JEV_KEY:
+            return "page_now", 0.0, "no-api-key"
+        body = json.dumps({
+            "model": "jev-latest",
+            "state": state,
+            "questions": {
+                "disposition": {
+                    "type": "choice",
+                    "instructions": (
+                        "This is a Kubernetes homelab alert. Decide how it "
+                        "should reach the operator. When genuinely unsure, "
+                        "prefer page_now -- a missed real alert costs far more "
+                        "than one unnecessary notification."),
+                    "criteria": DISPOSITIONS,
+                }
+            },
+        }).encode()
+        req = urllib.request.Request(JEV_URL, body, {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {JEV_KEY}"})
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as f:
+                a = json.load(f)["answers"]["disposition"]
+            return a.get("choice", "page_now"), float(a.get("confidence", 0.0)), "ok"
+        except urllib.error.HTTPError as e:
+            return "page_now", 0.0, f"http-{e.code}"
+        except Exception as e:
+            return "page_now", 0.0, type(e).__name__
+
+    def to_ntfy(raw, tags=None, priority=None):
+        if not NTFY_URL:
+            log(event="ntfy_unconfigured")
+            return False
+        hdr = {"Content-Type": "application/json"}
+        if tags:
+            hdr["X-Tags"] = tags
+        if priority:
+            hdr["X-Priority"] = priority
+        try:
+            urllib.request.urlopen(
+                urllib.request.Request(NTFY_URL, raw, hdr), timeout=10).read()
+            return True
+        except Exception as e:
+            # Nothing to fall back to -- ntfy IS the fallback. Count it so the
+            # AlertRouterDeliveryFailing rule can fire on the real receiver.
+            M["ntfy_errors"] += 1
+            log(event="ntfy_error", error=type(e).__name__)
+            return False
+
+    def flush_digest():
+        while True:
+            time.sleep(DIGEST_S)
+            with LOCK:
+                items, DIGEST_copy = list(DIGEST), None
+                DIGEST.clear()
+            if not items:
+                continue
+            lines = "\n".join(f"- {i}" for i in items[:40])
+            msg = json.dumps({"status": "digest", "alerts": [],
+                              "digest": f"{len(items)} non-urgent alerts\n{lines}"})
+            to_ntfy(msg.encode(), tags="clipboard", priority="low")
+            log(event="digest_sent", count=len(items))
+
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def _reply(self, code=200, body=b"ok", ctype="text/plain"):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass  # structured logging only; the default writes to stderr
+
+        def do_GET(self):
+            if self.path == "/healthz":
+                return self._reply()
+            if self.path == "/metrics":
+                with LOCK:
+                    pending = len(DIGEST)
+                    snap = dict(M)
+                out = [
+                    "# HELP alert_router_decisions_total Alerts by disposition.",
+                    "# TYPE alert_router_decisions_total counter",
+                ]
+                for d in ("page_now", "digest", "suppress"):
+                    out.append(f'alert_router_decisions_total{{disposition="{d}"}} '
+                               f'{snap.get(d, 0)}')
+                for k, h in (("failopen", "Alerts forwarded because classification failed."),
+                             ("jev_errors", "Failed Jev calls."),
+                             ("ntfy_errors", "Failed deliveries to ntfy."),
+                             ("received", "Webhook payloads received.")):
+                    out += [f"# HELP alert_router_{k}_total {h}",
+                            f"# TYPE alert_router_{k}_total counter",
+                            f"alert_router_{k}_total {snap.get(k, 0)}"]
+                out += ["# HELP alert_router_digest_pending Alerts awaiting the next digest.",
+                        "# TYPE alert_router_digest_pending gauge",
+                        f"alert_router_digest_pending {pending}"]
+                return self._reply(body=("\n".join(out) + "\n").encode())
+            self._reply(404, b"not found")
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(n)
+            # Acknowledge Alertmanager immediately. It retries on a non-2xx,
+            # and a retry storm on top of a slow Jev is its own outage.
+            self._reply()
+            try:
+                payload = json.loads(raw)
+            except Exception:
+                M["received"] += 1
+                M["failopen"] += 1
+                to_ntfy(raw)  # unparseable: forward it untouched
+                return
+            M["received"] += 1
+            state = describe(payload)
+            disp, conf, reason = classify(state)
+            if reason != "ok":
+                M["jev_errors"] += 1
+
+            name = (payload.get("alerts", [{}])[0]
+                    .get("labels", {}).get("alertname", "?"))
+
+            # The gate. Anything short of a confident non-urgent verdict pages.
+            if disp in ("digest", "suppress") and conf < THRESHOLD:
+                disp, reason = "page_now", f"{reason}/below-threshold({conf:.2f})"
+                M["failopen"] += 1
+
+            M[disp] += 1
+            log(event="decision", alert=name, disposition=disp,
+                confidence=round(conf, 3), reason=reason,
+                status=payload.get("status"))
+
+            if disp == "page_now":
+                to_ntfy(raw)
+            elif disp == "digest":
+                with LOCK:
+                    DIGEST.append(f"{name}: {payload.get('status')}")
+            # suppress: counted and logged, never delivered.
+
+    if __name__ == "__main__":
+        threading.Thread(target=flush_digest, daemon=True).start()
+        log(event="start", threshold=THRESHOLD, digest_interval=DIGEST_S,
+            jev_configured=bool(JEV_KEY), ntfy_configured=bool(NTFY_URL))
+        ThreadingHTTPServer(("", 8080), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-router
+  namespace: monitoring
+  annotations:
+    # Restart on a change to either the code or the key, without a manual
+    # rollout -- reloader is already running for exactly this.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate. Two replicas would each hold half the digest
+    # buffer and flush two partial rollups an hour.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: alert-router
+  template:
+    metadata:
+      labels:
+        app: alert-router
+    spec:
+      affinity:
+        nodeAffinity:
+          # Alertmanager is steered to thinkcentre02 by monitoring.yaml, and
+          # every alert makes this hop. preferred, not required: if node02 is
+          # down the alert path must still come up somewhere.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - thinkcentre02
+      containers:
+        - name: router
+          image: python:3.12-slim
+          command: ["python", "-u", "/app/router.py"]
+          env:
+            - name: JEV_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alert-router-secrets
+                  key: JEV_API_KEY
+            - name: NTFY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: alert-router-secrets
+                  key: NTFY_URL
+            - name: SUPPRESS_CONFIDENCE
+              # Start deliberately high. Lower it once `kubectl logs` shows a
+              # month of decisions and you can see where the model is actually
+              # reliable, rather than guessing now.
+              value: "0.90"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            # Cluster policy (manifests/kustomization.yaml): CPU request only,
+            # memory request and limit.
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              memory: 128Mi
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            - name: app
+              mountPath: /app
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: app
+          configMap:
+            name: alert-router-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-router
+  namespace: monitoring
+  labels:
+    app: alert-router
+spec:
+  type: ClusterIP
+  selector:
+    app: alert-router
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: alert-router
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: alert-router
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 60s

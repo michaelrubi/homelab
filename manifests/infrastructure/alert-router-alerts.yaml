@@ -1,0 +1,120 @@
+# Alerts for the alert router itself.
+#
+# Putting a classifier in the notification path adds a component that can fail
+# quietly, which is the specific failure this cluster has already lived through
+# once -- receiver "null", five days, four real incidents unseen. So the router
+# is monitored harder than the things it routes.
+#
+# Every rule here is severity=critical on purpose. Critical matches the
+# ntfy-critical route in monitoring.yaml, which is wired direct to ntfy and does
+# NOT pass through the router. A broken router therefore cannot suppress the
+# alerts announcing that it is broken. That independence is the point; do not
+# relabel these to warning.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: alert-router
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: alert-router.rules
+      rules:
+        - alert: AlertRouterDown
+          # If the router is gone, Alertmanager's webhook POSTs fail and the
+          # entire warning tier is going nowhere. Same shape as the null
+          # receiver, so it gets the same urgency.
+          expr: up{job="alert-router"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Alert router is down -- the warning tier is not being delivered"
+            description: >-
+              alert-router has been unreachable for 5m. Warning and info alerts
+              route through it and are currently going nowhere; critical still
+              reaches ntfy directly. Roll it back to a direct route while you
+              investigate: set the default receiver in monitoring.yaml back to
+              ntfy, or `kubectl -n monitoring rollout restart deploy/alert-router`.
+
+        - alert: AlertRouterAbsent
+          # up{} cannot fire if the target never appeared -- a deleted
+          # Deployment or a ServiceMonitor that stopped matching produces no
+          # series at all rather than a zero. Same lesson as
+          # BackupCronJobNeverSucceeded in reliability-alerts.yaml.
+          expr: absent(up{job="alert-router"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Alert router has no metrics series at all"
+            description: >-
+              Prometheus has no up{job="alert-router"} series. The Deployment,
+              the Service or the ServiceMonitor is gone, so the router is
+              unmonitored even if it happens to be running.
+
+        - alert: AlertRouterSuppressingEverything
+          # The dangerous failure is not a crash, it is confident nonsense:
+          # a router that answers "suppress" to everything looks perfectly
+          # healthy from the outside. Over an hour, with real traffic, a
+          # suppression share above 80% means the classifier has stopped
+          # discriminating.
+          expr: |
+            (
+              sum(rate(alert_router_decisions_total{disposition="suppress"}[1h]))
+              /
+              clamp_min(sum(rate(alert_router_decisions_total[1h])), 0.0001)
+            ) > 0.8
+            and
+            sum(increase(alert_router_decisions_total[1h])) > 10
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Alert router is suppressing over 80% of alerts"
+            description: >-
+              {{ $value | humanizePercentage }} of alerts in the last hour were
+              suppressed. Either something is genuinely flapping, or the
+              classifier has degraded. Check the decision log:
+              kubectl -n monitoring logs deploy/alert-router | tail -50
+
+        - alert: AlertRouterDeliveryFailing
+          # ntfy is the terminal receiver -- there is nothing behind it. A
+          # delivery failure here means a page was decided on and then lost.
+          expr: increase(alert_router_ntfy_errors_total[15m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Alert router failed to deliver to ntfy"
+            description: >-
+              {{ $value }} delivery failures in 15m. Alerts classified as
+              page_now were not delivered. Check NTFY_URL in the
+              alert-router-secrets Secret and that ntfy.sh is reachable.
+
+        - alert: AlertRouterFailingOpen
+          # Not urgent in itself -- failing open means alerts ARE arriving, just
+          # unclassified. It is critical only because it is invisible otherwise:
+          # the phone looks normal while you quietly pay for an API that stopped
+          # answering. Sustained for two hours before it says anything.
+          expr: |
+            (
+              sum(rate(alert_router_failopen_total[1h]))
+              /
+              clamp_min(sum(rate(alert_router_received_total[1h])), 0.0001)
+            ) > 0.5
+            and
+            sum(increase(alert_router_received_total[1h])) > 5
+          for: 2h
+          labels:
+            severity: critical
+          annotations:
+            summary: "Alert router is failing open -- classification is not working"
+            description: >-
+              Over half of alerts in the last hour bypassed classification and
+              were forwarded unconditionally. Behaviour is back to the
+              pre-router firehose, which is safe but not what you are paying
+              Jev for. Usual causes: expired JEV_API_KEY, rate limit, or
+              api.typesafe.ai unreachable from the cluster. Check:
+              kubectl -n monitoring logs deploy/alert-router | grep jev

@@ -235,7 +235,16 @@ spec:
           # denied, forgejo runner deregistered, postiz probe misconfigured)
           # ran unnoticed for 5+ days, and the hand-written Longhorn alerts
           # in longhorn-alerts.yaml fired into the void.
-          receiver: ntfy
+          # 2026-09-20: was `ntfy`. The warning tier now passes through
+          # alert-router (infrastructure/alert-router.yaml), which classifies
+          # each group as page / digest / suppress and forwards to this same
+          # ntfy topic. It fails open -- any error, timeout or low-confidence
+          # verdict pages exactly as before -- so the worst case is today's
+          # volume, not September 6th's silence.
+          #
+          # ROLLBACK is this one word: set it back to `ntfy` and the router is
+          # out of the path entirely. The receiver below is kept for that.
+          receiver: alert-router
           group_by: [alertname, namespace]
           group_wait: 30s
           group_interval: 5m
@@ -275,6 +284,16 @@ spec:
           # or require auth; if you want that, self-host ntfy or move this
           # block to a sops-encrypted alertmanager configSecret.
 
+          # The router. Alertmanager retries a non-2xx, so the service
+          # acknowledges immediately and classifies after responding.
+          - name: alert-router
+            webhook_configs:
+              - url: http://alert-router.monitoring.svc.cluster.local:8080/
+                send_resolved: false
+                max_alerts: 0
+
+          # Kept, though the default route no longer points here, so rolling
+          # back is a one-word edit above rather than restoring a deleted block.
           - name: ntfy
             webhook_configs:
               # 2026-09-12: send_resolved was true on every path, so each
