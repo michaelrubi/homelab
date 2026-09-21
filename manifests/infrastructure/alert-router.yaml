@@ -53,9 +53,22 @@ data:
     from collections import Counter, deque
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    JEV_URL   = os.environ.get("JEV_URL", "https://api.typesafe.ai/v1/systemone")
-    JEV_KEY   = os.environ.get("JEV_API_KEY", "")
-    NTFY_URL  = os.environ.get("NTFY_URL", "")
+    def _clean(name, default=""):
+        # Strip whitespace and stray quoting from a URL or key read out of a
+        # Secret. providers/Secrets.js in the Omamail plugin argues against
+        # trimming a *password*, and it is right -- a password may legitimately
+        # begin or end with a space. A URL or a bearer token may not, and the
+        # failure is silent: on 2026-09-20 NTFY_URL was encrypted with a single
+        # trailing backtick copied along with a markdown code fence, the router
+        # classified perfectly, and every page it decided on was then dropped
+        # with an opaque HTTPError. Classification working while delivery does
+        # not is the worst shape this service can fail in, so the cheap guard
+        # is worth it.
+        return os.environ.get(name, default).strip().strip("`\"'").strip()
+
+    JEV_URL   = _clean("JEV_URL", "https://api.typesafe.ai/v1/systemone")
+    JEV_KEY   = _clean("JEV_API_KEY")
+    NTFY_URL  = _clean("NTFY_URL")
     # Suppress only when Jev is at least this sure. Below it, the alert pages.
     THRESHOLD = float(os.environ.get("SUPPRESS_CONFIDENCE", "0.85"))
     TIMEOUT   = float(os.environ.get("JEV_TIMEOUT_SECONDS", "3"))
