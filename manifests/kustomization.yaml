@@ -45,6 +45,7 @@ resources:
 - infrastructure/alert-router.yaml
 - infrastructure/alert-router-alerts.yaml
 - infrastructure/cloudflared.yaml
+- infrastructure/flux-alerts.yaml
 - infrastructure/homepage-app.yaml
 - infrastructure/homepage-config.yaml
 - infrastructure/homepage-rbac.yaml

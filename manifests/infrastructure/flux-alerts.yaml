@@ -1,0 +1,84 @@
+# Flux had no monitoring at all until 2026-09-20: no ServiceMonitor, no
+# PodMonitor, no rule. Prometheus had zero flux-system targets, so a wedged
+# GitOps controller was invisible to every alert path in the cluster.
+#
+# That is a big blind spot, because a Kustomization that fails to build is
+# all-or-nothing: it stops applying EVERY resource it owns, not just the one
+# that is malformed. On 2026-09-20 a duplicated Secret document in
+# secrets/secrets.sops.yaml failed `kustomize build` for ~35 minutes, during
+# which nothing under manifests/ could deploy and lastAppliedRevision sat on
+# a stale commit. Nothing reported it; it was found by hand while chasing an
+# unrelated 502.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: flux-system
+  namespace: flux-system
+  labels:
+    # Required. The Prometheus instance selects monitors with
+    # podMonitorSelector matchLabels release=kube-prometheus-stack; without
+    # this label the PodMonitor is created, is never discovered, and the
+    # rule below silently evaluates against no data forever. Its
+    # podMonitorNamespaceSelector is {} (all namespaces), which is why this
+    # can live in flux-system rather than monitoring.
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - helm-controller
+          - kustomize-controller
+          - notification-controller
+          - source-controller
+  podMetricsEndpoints:
+    - port: http-prom
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: flux-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: flux.rules
+      rules:
+        - alert: FluxReconciliationFailing
+          # `exported_namespace`, not `namespace`: the PodMonitor attaches the
+          # controller pod's own namespace as `namespace`, so Prometheus moves
+          # the metric's own namespace label out of the way rather than
+          # overwrite it. Getting this wrong yields a rule that never fires.
+          #
+          # The `Deleted` term is upstream's, and it matters: an object being
+          # torn down reports Ready=False legitimately for a few seconds, and
+          # multiplying by 0 drops it rather than paging on a normal delete.
+          expr: >-
+            max by (exported_namespace, name, kind) (gotk_reconcile_condition{type="Ready",status="False"})
+            + on (exported_namespace, name, kind)
+            (max by (exported_namespace, name, kind) (gotk_reconcile_condition{type="Deleted",status="True"})) * 0
+            == 1
+          # 30m is three reconciles of the `manifests` Kustomization, whose
+          # interval is 10m. Flux retries by itself and the ordinary transient
+          # failures -- a git fetch blip, a HelmRelease waiting on its chart, a
+          # CRD applied in the same commit as a resource that uses it -- clear
+          # well inside that window. Anything still failing after three
+          # attempts is wedged and will stay wedged until someone pushes a fix.
+          # This is the "has not self-healed" threshold, not a delay.
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Flux {{ $labels.kind }} {{ $labels.name }} has not reconciled in 30m"
+            description: >-
+              {{ $labels.kind }} {{ $labels.exported_namespace }}/{{ $labels.name }}
+              has failed to reconcile for 30 minutes, so nothing it owns is
+              being applied -- including changes pushed since. Read the reason
+              with: kubectl get {{ $labels.kind | lower }} {{ $labels.name }}
+              -n {{ $labels.exported_namespace }}
+              -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
