@@ -336,6 +336,44 @@ spec:
             target_matchers: [severity = "info"]
             equal: [namespace, alertname]
 
+          # One broken pod is one incident, not four notifications.
+          #
+          # 2026-09-20, the CouchDB outage: a single pod stuck in
+          # CreateContainerConfigError produced KubePodNotReady,
+          # KubeDeploymentReplicasMismatch, KubePodCrashLooping and
+          # KubeDeploymentRolloutStuck within ten minutes. The router
+          # classified all four page_now -- correctly, each is a true
+          # statement -- and all four were delivered. Four pages describing
+          # one fact is how a notification channel stops being read, and it
+          # was: the outage was found by opening Obsidian, not by alert.
+          #
+          # The two severity rules above cannot collapse these, because
+          # `equal` includes alertname -- so a critical only ever inhibits a
+          # warning of the SAME name, which no pair of rules here produces.
+          # Deduplicating across alertnames needs its own rule.
+          #
+          # Deliberate tradeoff: `equal` is namespace only. The pod alerts
+          # carry `pod`, the deployment alerts carry `deployment`, and
+          # Alertmanager can only join on labels that are equal, not on one
+          # that is a prefix of the other. So while any pod in a namespace is
+          # unhealthy, deployment-level alerts for that namespace are held
+          # back -- and nearly everything here lives in `default`. That is
+          # real isolation traded for quiet. The alert that survives names
+          # the failing pod, and `kubectl get pods -n <ns>` shows the rest.
+          - source_matchers:
+              - alertname =~ "KubePodNotReady|KubePodCrashLooping"
+            target_matchers:
+              - alertname =~ "KubeDeploymentReplicasMismatch|KubeDeploymentRolloutStuck|KubeStatefulSetReplicasMismatch|KubeStatefulSetUpdateNotRolledOut|KubeDaemonSetRolloutStuck"
+            equal: [namespace]
+
+          # A crash-looping pod is by definition also not ready. Keep the
+          # alert that names the container and the restart count.
+          - source_matchers:
+              - alertname = "KubePodCrashLooping"
+            target_matchers:
+              - alertname = "KubePodNotReady"
+            equal: [namespace, pod]
+
           # 2026-09-12: the two rules below are chart defaults that this
           # hand-written inhibit_rules block silently replaced. Dropping
           # them broke InfoInhibitor in both directions.
