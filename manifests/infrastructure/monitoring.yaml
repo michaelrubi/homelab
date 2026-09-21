@@ -224,7 +224,28 @@ spec:
                         - thinkcentre02
       config:
         global:
-          resolve_timeout: 5m
+          # 2026-09-20: raised from 5m for the Flux alerts in
+          # infrastructure/flux-alerts.yaml, which arrive by API rather than
+          # from Prometheus.
+          #
+          # resolve_timeout only applies to alerts that arrive WITHOUT an
+          # EndsAt -- which is the API-posted case. Prometheus always sets
+          # EndsAt and refreshes it every evaluation, so the rules in this
+          # cluster are unaffected by this value either way.
+          #
+          # It has to exceed the reconcile interval of the object being
+          # watched, or the alert cannot stay continuously active. The
+          # `manifests` Kustomization reconciles every 10m, so at 5m a
+          # persistently failing Kustomization would go: error event at t=0,
+          # auto-resolve at t=5, new error event at t=10, auto-resolve at
+          # t=15. Each cycle starts a NEW group, which restarts group_wait,
+          # so a 30m group_wait would never elapse and the alert would be
+          # silent forever -- indistinguishable from a healthy cluster.
+          #
+          # 15m > 10m, so consecutive failed reconciles refresh one
+          # continuously-active alert instead of creating a series of short
+          # ones.
+          resolve_timeout: 15m
 
         route:
           # Default destination for everything that is not Watchdog.
@@ -276,6 +297,35 @@ spec:
                 - severity = "critical"
               continue: false
               repeat_interval: 1h
+
+            # Flux reconciliation failures, posted by notification-controller
+            # via the Provider in infrastructure/flux-alerts.yaml. Their
+            # alertname is FluxKustomization*/FluxHelmRelease*/etc and their
+            # severity is "error", which matches neither route above, so they
+            # would otherwise fall through to the default alert-router route
+            # and notify after group_wait: 30s.
+            #
+            # group_wait is doing the job that `for:` does on a PrometheusRule.
+            # These alerts are pushed, not evaluated, so there is no `for:` to
+            # set -- but holding a NEW group for 30m has the same effect: Flux
+            # retries on its own, and a failure that clears stops producing
+            # error events, the alert resolves, the group empties and nothing
+            # is ever sent. Only something still failing after 30m notifies.
+            #
+            # This depends on resolve_timeout (15m) exceeding the reconcile
+            # interval -- see the note in global above. If the interval on a
+            # watched object is ever raised past 15m, raise that too or this
+            # route goes quiet.
+            #
+            # Routed through alert-router like the default tier, so the
+            # classifier and its fail-open behaviour still apply.
+            - receiver: alert-router
+              matchers:
+                - alertname =~ "Flux.*"
+              group_by: [alertname, namespace, name]
+              group_wait: 30m
+              group_interval: 30m
+              repeat_interval: 4h
 
         receivers:
           # NOTE: the ntfy URL below is a capability -- anyone who knows

@@ -1,14 +1,35 @@
 # Flux had no monitoring at all until 2026-09-20: no ServiceMonitor, no
-# PodMonitor, no rule. Prometheus had zero flux-system targets, so a wedged
-# GitOps controller was invisible to every alert path in the cluster.
+# PodMonitor, no rule, no Alert. A wedged GitOps controller was invisible to
+# every alert path in the cluster.
 #
-# That is a big blind spot, because a Kustomization that fails to build is
+# That is a large blind spot, because a Kustomization that fails to build is
 # all-or-nothing: it stops applying EVERY resource it owns, not just the one
 # that is malformed. On 2026-09-20 a duplicated Secret document in
-# secrets/secrets.sops.yaml failed `kustomize build` for ~35 minutes, during
-# which nothing under manifests/ could deploy and lastAppliedRevision sat on
-# a stale commit. Nothing reported it; it was found by hand while chasing an
-# unrelated 502.
+# secrets/secrets.sops.yaml failed `kustomize build` for ~35 minutes, and
+# later an invalid PrometheusRule in THIS file failed admission for another
+# ten. Both times everything under manifests/ was frozen behind it and
+# lastAppliedRevision sat on a stale commit. Neither was reported.
+#
+# WHY THIS IS NOT A PrometheusRule
+#
+# The obvious implementation -- alert on gotk_reconcile_condition -- does not
+# work on this cluster, and fails silently rather than loudly:
+#
+#   * gotk_reconcile_condition does not exist in Flux v1.8.x. The controllers
+#     export only gotk_reconcile_duration_seconds plus event/token metrics.
+#     A rule written against it is valid PromQL that never returns a sample.
+#     This file shipped such a rule briefly (412fa77) before it was caught.
+#
+#   * controller_runtime_reconcile_errors_total{controller="kustomization"}
+#     looks like a replacement and is not. Measured during the ten-minute
+#     wedge above, it read exactly 0: Flux records a build failure in the
+#     object's status and returns requeue_after, not a controller-runtime
+#     error. result="requeue_after" was 2219, result="error" was 0.
+#
+# So no metric in this Flux version exposes Ready=False. The remaining
+# options were teaching kube-state-metrics to export CR conditions -- which
+# puts the source of KubePodNotReady and most default rules at risk if the
+# config is wrong -- or using Flux's own event pipeline, below.
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
@@ -17,10 +38,13 @@ metadata:
   labels:
     # Required. The Prometheus instance selects monitors with
     # podMonitorSelector matchLabels release=kube-prometheus-stack; without
-    # this label the PodMonitor is created, is never discovered, and the
-    # rule below silently evaluates against no data forever. Its
-    # podMonitorNamespaceSelector is {} (all namespaces), which is why this
-    # can live in flux-system rather than monitoring.
+    # this label the object is created, never discovered, and anything built
+    # on it evaluates against no data forever. podMonitorNamespaceSelector is
+    # {} (all namespaces), which is why this can live outside `monitoring`.
+    #
+    # This is kept even though the alerting now goes through the Alert below:
+    # reconcile durations and the controller-runtime metrics are worth having
+    # for dashboards, and all four targets scrape clean.
     release: kube-prometheus-stack
 spec:
   namespaceSelector:
@@ -38,47 +62,59 @@ spec:
   podMetricsEndpoints:
     - port: http-prom
 ---
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
+# Flux's own event pipeline, posted into the Alertmanager that is already
+# running. notification-controller v1.8.4 supports a native `alertmanager`
+# provider type, so the event arrives as a normal alert and passes through
+# the same routes, inhibit rules and receivers as everything else.
+#
+# The payload carries Flux's actual error text rather than a generic
+# summary -- "may not add resource with an already registered id: ..." is
+# the whole diagnosis, in the notification.
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
 metadata:
-  name: flux-alerts
-  namespace: monitoring
-  labels:
-    release: kube-prometheus-stack
+  name: alertmanager
+  namespace: flux-system
 spec:
-  groups:
-    - name: flux.rules
-      rules:
-        - alert: FluxReconciliationFailing
-          # `exported_namespace`, not `namespace`: the PodMonitor attaches the
-          # controller pod's own namespace as `namespace`, so Prometheus moves
-          # the metric's own namespace label out of the way rather than
-          # overwrite it. Getting this wrong yields a rule that never fires.
-          #
-          # The `Deleted` term is upstream's, and it matters: an object being
-          # torn down reports Ready=False legitimately for a few seconds, and
-          # multiplying by 0 drops it rather than paging on a normal delete.
-          expr: >-
-            max by (exported_namespace, name, kind) (gotk_reconcile_condition{type="Ready",status="False"})
-            + on (exported_namespace, name, kind)
-            (max by (exported_namespace, name, kind) (gotk_reconcile_condition{type="Deleted",status="True"})) * 0
-            == 1
-          # 30m is three reconciles of the `manifests` Kustomization, whose
-          # interval is 10m. Flux retries by itself and the ordinary transient
-          # failures -- a git fetch blip, a HelmRelease waiting on its chart, a
-          # CRD applied in the same commit as a resource that uses it -- clear
-          # well inside that window. Anything still failing after three
-          # attempts is wedged and will stay wedged until someone pushes a fix.
-          # This is the "has not self-healed" threshold, not a delay.
-          for: 30m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Flux {{ $labels.kind }} {{ $labels.name }} has not reconciled in 30m"
-            description: >-
-              {{ $labels.kind }} {{ $labels.exported_namespace }}/{{ $labels.name }}
-              has failed to reconcile for 30 minutes, so nothing it owns is
-              being applied -- including changes pushed since. Read the reason
-              with: kubectl get {{ $labels.kind | toLower }} {{ $labels.name }}
-              -n {{ $labels.exported_namespace }}
-              -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+  type: alertmanager
+  address: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093/api/v2/alerts
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: flux-reconciliation-errors
+  namespace: flux-system
+spec:
+  providerRef:
+    name: alertmanager
+  # info would forward every successful reconcile. Only failures.
+  eventSeverity: error
+  # Listed as explicit (kind, namespace) pairs rather than a wildcard
+  # namespace. The CRD documents `name: '*'` but says nothing about whether
+  # `namespace` accepts one, and the failure mode for guessing wrong here is
+  # an Alert that matches nothing and stays quiet -- which is exactly the
+  # shape of bug this whole file exists to stop shipping.
+  #
+  # Cost of being explicit: a Flux object in a NEW namespace is not covered
+  # until it is added here. Kustomizations and the GitRepository -- the ones
+  # whose failure freezes everything -- are all in flux-system and are the
+  # ones that matter most.
+  eventSources:
+    - kind: Kustomization
+      name: '*'
+      namespace: flux-system
+    - kind: GitRepository
+      name: '*'
+      namespace: flux-system
+    - kind: HelmRelease
+      name: '*'
+      namespace: default
+    - kind: HelmRelease
+      name: '*'
+      namespace: monitoring
+    - kind: HelmRepository
+      name: '*'
+      namespace: default
+    - kind: HelmRepository
+      name: '*'
+      namespace: monitoring
