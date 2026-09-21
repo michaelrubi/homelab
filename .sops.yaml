@@ -21,3 +21,16 @@ creation_rules:
   - path_regex: .*\.sops\.ya?ml$
     encrypted_regex: '^(data|stringData)$'
     age: age1qf4h0dz5mjzx75vj4dl9ak6uvuq8ucujhsnc52scdrxp400lu4jqajyxmj
+
+  # The plain -> encrypted flow. sops matches creation rules against the INPUT
+  # path, so `sops -e secrets.plain.yaml > manifests/secrets/secrets.sops.yaml`
+  # found no rule and failed with "no matching creation rules found" -- the
+  # output path never gets consulted. Without this, that command only works by
+  # passing --age and --encrypted-regex by hand, which is exactly the
+  # remembering-two-flags problem this file exists to remove.
+  #
+  # *.plain.yaml is gitignored, so a rule here encrypts the local working copy
+  # on its way into manifests/secrets/ and never governs anything committed.
+  - path_regex: .*\.plain\.ya?ml$
+    encrypted_regex: '^(data|stringData)$'
+    age: age1qf4h0dz5mjzx75vj4dl9ak6uvuq8ucujhsnc52scdrxp400lu4jqajyxmj
