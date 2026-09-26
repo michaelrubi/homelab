@@ -194,11 +194,24 @@ data:
       timeout: 3h
       envs:
         GITHUB_SERVER_URL: "http://forgejo-service.default.svc.cluster.local:3000"
+        DOCKER_HOST: tcp://docker.internal:2375
+      # Labels come from config (registration-file labels are a fallback
+      # only). act-22.04 is the GitHub-runner-compatible image: git, curl,
+      # node, docker CLI included. Docs:
+      # https://forgejo.org/docs/next/admin/actions/configuration/#choosing-labels
+      labels:
+        - "ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-22.04"
+        - "docker:docker://ghcr.io/catthehacker/ubuntu:act-22.04"
     cache:
       enabled: true
       dir: /data/cache
     container:
       docker_host: tcp://localhost:2375
+      # Official DinD access pattern: job containers reach the dind daemon
+      # via DOCKER_HOST above; host-gateway resolves to the pod netns where
+      # dockerd listens on 0.0.0.0:2375.
+      # https://forgejo.org/docs/next/admin/actions/docker-access/#docker-in-docker
+      options: "--add-host=docker.internal:host-gateway"
 ---
 # 6. Runner
 apiVersion: apps/v1
@@ -234,6 +247,8 @@ spec:
         - name: config
           configMap:
             name: runner-config
+        - name: dind-storage
+          emptyDir: {}
       initContainers:
         - name: volume-permissions
           image: busybox:1.36
@@ -264,7 +279,7 @@ spec:
               # The config says the file is at /data/runner
               if [ ! -f "/data/runner" ]; then
                 echo "Registration file not found. Registering new runner..."
-                forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://node:22-alpine,ubuntu-latest:docker://node:22-alpine,kaniko:docker://gcr.io/kaniko-project/executor:debug
+                forgejo-runner register --no-interactive --config /config/config.yml --name $FORGEJO_RUNNER_NAME --instance $FORGEJO_INSTANCE_URL --token $FORGEJO_RUNNER_REGISTRATION_TOKEN --labels docker:docker://ghcr.io/catthehacker/ubuntu:act-22.04,ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-22.04
               else
                 echo "Runner already registered. Skipping registration."
               fi
@@ -305,6 +320,15 @@ spec:
               memory: "2Gi"
           securityContext:
             privileged: true
+          # Explicit hosts replace the entrypoint defaults (which only
+          # apply when no command is set). insecure-registry is required
+          # to push to the plain-HTTP internal Forgejo registry in Tier 3.
+          command:
+            - dockerd
+            - --host=unix:///var/run/docker.sock
+            - --host=tcp://0.0.0.0:2375
+            - --tls=false
+            - --insecure-registry=forgejo-service.default.svc.cluster.local:3000
           env:
             - name: DOCKER_TLS_CERTDIR
               value: ""
@@ -313,3 +337,5 @@ spec:
           volumeMounts:
             - name: runner-data
               mountPath: /data
+            - name: dind-storage
+              mountPath: /var/lib/docker
