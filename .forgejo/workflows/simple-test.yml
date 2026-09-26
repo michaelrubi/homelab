@@ -9,4 +9,4 @@ jobs:
     steps:
       - run: |
           echo "Hello from Forgejo Actions!"
-          echo "Runner is working!"
+          grep PRETTY_NAME /etc/os-release
