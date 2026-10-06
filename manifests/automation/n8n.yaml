@@ -76,7 +76,7 @@ spec:
               "n8n-nodes-forgejo": "0.2.0",
               "@mendable/n8n-nodes-firecrawl": "2.1.2",
               "n8n-nodes-webcrawlerapi": "0.3.7",
-              "n8n-nodes-scoro": "0.2.1",
+              "n8n-nodes-scoro": "^1.1.0",
               "n8n-nodes-run-node-with-credentials-x": "0.4.1",
               "@gotohuman/n8n-nodes-gotohuman": "0.3.0",
               "n8n-nodes-instantly": "0.1.7547",
