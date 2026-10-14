@@ -249,7 +249,7 @@ spec:
                 echo "waiting for temporal postgres..."; sleep 2;
               done
         - name: wait-for-elasticsearch
-          image: curlimages/curl:8.10.1
+          image: curlimages/curl:8.23.0
           command:
             - sh
             - -c
