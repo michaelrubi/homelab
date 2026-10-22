@@ -121,3 +121,19 @@ patches:
                       operator: In
                       values:
                         - thinkcentre02
+  - target:
+      kind: Deployment
+      name: ^(stalwart|jackett-deployment|vaultwarden|postgres)$
+    patch: |-
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - thinkcentre01

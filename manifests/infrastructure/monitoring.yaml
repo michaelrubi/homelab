@@ -199,6 +199,16 @@ spec:
             cpu: 250m
           limits:
             memory: 3Gi
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - thinkcentre01
 
     # 3. Alertmanager Configuration
     alertmanager:
