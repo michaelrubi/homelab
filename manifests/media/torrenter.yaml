@@ -25,7 +25,7 @@ spec:
         # clusters/my-cluster/image-automation.yaml rewrites this line (the
         # marker comment below must stay on it). Tags are immutable, so
         # IfNotPresent is correct; a deploy is a new tag, never a restart.
-        image: mrubi86/torrenter:latest # {"$imagepolicy": "flux-system:torrenter"}
+        image: mrubi86/torrenter:main-ee42091-1792866809 # {"$imagepolicy": "flux-system:torrenter"}
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
