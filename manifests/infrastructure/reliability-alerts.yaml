@@ -41,14 +41,23 @@ spec:
         - alert: BackupCronJobNeverSucceeded
           # The staleness rule above cannot fire if the series is absent,
           # which is the case for a job that has never once completed.
-          expr: absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-standalone"})
-          for: 2h
+          # One absent() per job: absent() over a regex goes quiet as soon
+          # as ANY job matches, which would hide a new job that never ran.
+          # Equality matchers also carry the cronjob label into the alert.
+          expr: |
+            absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-standalone"})
+            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-kaneo"})
+            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-postiz"})
+            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-temporal"})
+          # 26h, not 2h: the new jobs run once a day, so on the day they are
+          # added there is no completion to record for up to 24h.
+          for: 26h
           labels:
             severity: critical
           annotations:
-            summary: "postgres-dump-standalone has no successful run on record"
+            summary: "{{ $labels.cronjob }} has no successful run on record"
             description: >-
-              No completion has ever been recorded for the Postgres dump
+              No completion has ever been recorded for this Postgres dump
               job. Either it has never worked, or kube-state-metrics is not
               reporting. Both are worth looking at immediately.
 
