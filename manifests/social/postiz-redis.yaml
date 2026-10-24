@@ -40,7 +40,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: redis
-          image: redis:7.2-alpine
+          image: redis:7.4-alpine
           ports:
             - containerPort: 6379
           command: ["redis-server"]
