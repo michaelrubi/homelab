@@ -69,7 +69,10 @@ spec:
             - sh
             - -c
             - |
-              chown -R 1000:1000 /data
+              # Only walk the tree when the root is wrong (fresh or restored
+              # volume). An unconditional chown -R crawled every git object
+              # on each restart, including the weekly kured reboot.
+              [ "$(stat -c '%u:%g' /data)" = "1000:1000" ] || chown -R 1000:1000 /data
           volumeMounts:
             - name: data
               mountPath: /data
@@ -252,6 +255,10 @@ spec:
       initContainers:
         - name: volume-permissions
           image: busybox:1.36
+          # Deliberately NOT guarded like init-forgejo-data: the dind
+          # container below mounts this same volume as root, so files deep in
+          # the tree can be root-owned while /data itself looks correct. The
+          # volume is 2Gi, so the full walk is cheap.
           command: ["sh", "-c", "chown -R 1000:1000 /data"]
           volumeMounts:
             - name: runner-data
