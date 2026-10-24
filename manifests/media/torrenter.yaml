@@ -20,14 +20,13 @@ spec:
     spec:
       containers:
       - name: torrenter
-        # Deliberately :latest, unlike every other image here. This is our own
-        # app and :latest + Always is the deploy mechanism -- push an image,
-        # restart the pod. Renovate cannot track it either way (it is not
-        # upstream), and the supply-chain argument for pinning does not apply
-        # to an image we build ourselves. The registry publishes no semver
-        # tags, only :latest and a stale commit sha.
-        image: mrubi86/torrenter:latest
-        imagePullPolicy: Always
+        # Managed by Flux image automation, not Renovate and not by hand:
+        # CI publishes main-<sha>-<timestamp> tags and the ImagePolicy in
+        # clusters/my-cluster/image-automation.yaml rewrites this line (the
+        # marker comment below must stay on it). Tags are immutable, so
+        # IfNotPresent is correct; a deploy is a new tag, never a restart.
+        image: mrubi86/torrenter:latest # {"$imagepolicy": "flux-system:torrenter"}
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
         resources:
