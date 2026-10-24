@@ -68,6 +68,7 @@ resources:
 - productivity/kaneo-postgres.yaml
 - productivity/kaneo.yaml
 - secrets/secrets.sops.yaml
+- secrets/alertmanager-webhooks.sops.yaml
 - productivity/obsidian-sync.yaml
 - social/postiz-app.yaml
 - social/postiz-instagram-provider-js-configmap.yaml
