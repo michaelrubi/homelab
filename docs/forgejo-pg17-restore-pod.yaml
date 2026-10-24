@@ -1,0 +1,59 @@
+# One-off pod for docs/forgejo-postgres-upgrade.md. NOT part of the
+# kustomization: apply it by hand during the upgrade and delete it afterwards.
+#
+# It initialises an empty PG17 cluster on forgejo-db-pvc-17 with the same
+# PGDATA layout, user and password as the Forgejo sidecar, so the restored
+# data directory is exactly what the sidecar expects. POSTGRES_DB is
+# `postgres` on purpose: the dump's own CREATE DATABASE then creates
+# `forgejo` with its original owner and settings.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-db-pvc-17
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: forgejo-pg17-restore
+  namespace: default
+spec:
+  restartPolicy: Never
+  securityContext:
+    # Same as the Forgejo pod, so the volume lands with the ownership it
+    # will see in production.
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+  containers:
+    - name: postgres
+      image: postgres:17-alpine
+      env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_USER
+          value: forgejo
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: forgejo-secrets
+              key: FORGEJO_DB_PASSWORD
+        - name: POSTGRES_DB
+          value: postgres
+      readinessProbe:
+        exec:
+          command: ["pg_isready", "-h", "127.0.0.1", "-U", "forgejo", "-d", "postgres"]
+        periodSeconds: 5
+      volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+  volumes:
+    - name: db-data
+      persistentVolumeClaim:
+        claimName: forgejo-db-pvc-17
