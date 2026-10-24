@@ -9,15 +9,21 @@
 # by the entrypoint (it just appends "/api"). We still set it explicitly
 # via Secret so the value is obvious in `kubectl describe`.
 #
-# DATABASE_URL comes from kaneo-secrets via envFrom, matching how
-# postiz-secrets carries its own DATABASE_URL. It used to be inline on the
-# Deployment, which put a live Postgres password in a public repo.
+# DATABASE_URL is not set anywhere: the image's entrypoint builds it from
+# POSTGRES_HOST / POSTGRES_PORT below plus POSTGRES_USER / POSTGRES_PASSWORD /
+# POSTGRES_DB from kaneo-db-secrets -- the same Secret kaneo-postgres reads,
+# so there is one copy of the password instead of two to keep in lockstep.
+#
+# 2026-10-24: it used to come from kaneo-secrets.DATABASE_URL. Commit 4fd8b34
+# (2026-09-20) re-encrypted secrets.sops.yaml from a stale plaintext copy and
+# silently dropped that key. The running pod kept its old environment for five
+# weeks, so nothing noticed until the next restart crash-looped with
+# "DATABASE_URL is not set and POSTGRES_PASSWORD is not set".
 #
 # Rotating the password is still a two-step operation, because POSTGRES_PASSWORD
 # only takes effect at first init — an already-initialized volume ignores it:
 #   1. ALTER USER kaneo WITH PASSWORD '<new>';  in the kaneo-postgres pod
-#   2. update BOTH kaneo-db-secrets.POSTGRES_PASSWORD and
-#      kaneo-secrets.DATABASE_URL in secrets.sops.yaml, in lockstep
+#   2. update kaneo-db-secrets.POSTGRES_PASSWORD in secrets.sops.yaml
 # Skip step 1 and the pod fails with "password authentication failed".
 #
 # Public hostname kaneo.rubiconetic.com is routed via the Cloudflare
@@ -80,6 +86,8 @@ spec:
           envFrom:
             - secretRef:
                 name: kaneo-secrets
+            - secretRef:
+                name: kaneo-db-secrets
           env:
             - name: POSTGRES_HOST
               value: "kaneo-postgres"
