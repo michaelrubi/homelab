@@ -37,7 +37,7 @@
             "automerge": false
         },
         {
-            "description": "Our own app; :latest plus imagePullPolicy Always is the deploy mechanism, not a dependency to track.",
+            "description": "Our own app; Flux image automation (clusters/my-cluster/image-automation.yaml) deploys new tags, not Renovate.",
             "matchPackageNames": [
                 "mrubi86/torrenter"
             ],

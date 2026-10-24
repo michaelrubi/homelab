@@ -88,7 +88,10 @@ spec:
             - sh
             - -c
             - |
-              chown -R 1000:1000 /data
+              # Only walk the tree when the root is wrong (fresh or restored
+              # volume). An unconditional chown -R crawled every git object
+              # on each restart, including the weekly kured reboot.
+              [ "$(stat -c '%u:%g' /data)" = "1000:1000" ] || chown -R 1000:1000 /data
           volumeMounts:
             - name: data
               mountPath: /data
@@ -307,6 +310,10 @@ spec:
       initContainers:
         - name: volume-permissions
           image: busybox:1.36
+          # Deliberately NOT guarded like init-forgejo-data: the dind
+          # container below mounts this same volume as root, so files deep in
+          # the tree can be root-owned while /data itself looks correct. The
+          # volume is 2Gi, so the full walk is cheap.
           command: ["sh", "-c", "chown -R 1000:1000 /data"]
           volumeMounts:
             - name: runner-data
@@ -384,6 +391,16 @@ spec:
             - --host=tcp://0.0.0.0:2375
             - --tls=false
             - --insecure-registry=forgejo-service.default.svc.cluster.local:3000
+            # Pod eth0 MTU is 1230: flannel VXLAN (-50) over Tailscale
+            # (1280). Docker bridges default to 1500, so job containers
+            # sent oversized packets that were silently dropped -- TLS
+            # handshakes to github.com hung ~2.5min and reset, failing
+            # validate-manifests' tooling download on most runs. --mtu
+            # covers docker0; --default-network-opt covers the per-job
+            # WORKFLOW-* networks the runner creates. Verified 2026-10-24:
+            # same download timed out at 1500, took 0.85s at 1230.
+            - --mtu=1230
+            - --default-network-opt=bridge=com.docker.network.driver.mtu=1230
           env:
             - name: DOCKER_TLS_CERTDIR
               value: ""
