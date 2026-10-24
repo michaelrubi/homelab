@@ -336,6 +336,16 @@ spec:
             - --host=tcp://0.0.0.0:2375
             - --tls=false
             - --insecure-registry=forgejo-service.default.svc.cluster.local:3000
+            # Pod eth0 MTU is 1230: flannel VXLAN (-50) over Tailscale
+            # (1280). Docker bridges default to 1500, so job containers
+            # sent oversized packets that were silently dropped -- TLS
+            # handshakes to github.com hung ~2.5min and reset, failing
+            # validate-manifests' tooling download on most runs. --mtu
+            # covers docker0; --default-network-opt covers the per-job
+            # WORKFLOW-* networks the runner creates. Verified 2026-10-24:
+            # same download timed out at 1500, took 0.85s at 1230.
+            - --mtu=1230
+            - --default-network-opt=bridge=com.docker.network.driver.mtu=1230
           env:
             - name: DOCKER_TLS_CERTDIR
               value: ""
