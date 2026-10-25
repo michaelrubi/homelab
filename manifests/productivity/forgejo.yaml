@@ -1,8 +1,27 @@
-# 1. PVC for Forgejo DB
+# 1. PVCs for Forgejo DB
+# forgejo-db-pvc holds the old PG_VERSION=14 data directory. Nothing mounts it
+# since the 2026-10 upgrade to 17, but it stays defined here on purpose: it IS
+# the rollback, and removing it from this file would let Flux prune it.
+# Drop it in a separate change once 17 has run cleanly for a couple of weeks.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: forgejo-db-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+# PG_VERSION=17. Populated from a pg_dumpall of the 14 cluster, not by
+# pointing 17 at the old files. See docs/forgejo-postgres-upgrade.md.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-db-pvc-17
   namespace: default
 spec:
   accessModes:
@@ -69,7 +88,10 @@ spec:
             - sh
             - -c
             - |
-              chown -R 1000:1000 /data
+              # Only walk the tree when the root is wrong (fresh or restored
+              # volume). An unconditional chown -R crawled every git object
+              # on each restart, including the weekly kured reboot.
+              [ "$(stat -c '%u:%g' /data)" = "1000:1000" ] || chown -R 1000:1000 /data
           volumeMounts:
             - name: data
               mountPath: /data
@@ -78,15 +100,16 @@ spec:
         # --- Postgres ---
         - name: postgres
           # DO NOT bump this major version by editing the tag. The data
-          # directory on forgejo-db-pvc is PG_VERSION=14; Postgres refuses to
-          # start against files from an older major ("database files are
+          # directory on forgejo-db-pvc-17 is PG_VERSION=17; Postgres refuses
+          # to start against files from an older major ("database files are
           # incompatible with server"), and Forgejo is Flux's own git source,
           # so that failure takes GitOps down with it.
           #
-          # A real upgrade is: scale to 0, pg_dumpall from a 14 sidecar onto
-          # the NFS share, delete the PVC, recreate at the new major, restore,
-          # scale back up. 14 is EOL Nov 2026, so this is worth scheduling.
-          image: postgres:14-alpine
+          # 2026-10: upgraded 14 -> 17 (14 is EOL Nov 2026) by dump and
+          # restore into a NEW volume, leaving the 14 volume untouched for
+          # rollback. docs/forgejo-postgres-upgrade.md is the procedure;
+          # reuse it for the next major.
+          image: postgres:17-alpine
           env:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -99,6 +122,19 @@ spec:
                   key: FORGEJO_DB_PASSWORD
             - name: POSTGRES_DB
               value: forgejo
+          # Over TCP on 127.0.0.1, the same path Forgejo uses, rather than
+          # the unix socket.
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "forgejo", "-d", "forgejo"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "forgejo", "-d", "forgejo"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 4
           volumeMounts:
             - name: db-data
               mountPath: /var/lib/postgresql/data
@@ -144,6 +180,28 @@ spec:
               name: http
             - containerPort: 22
               name: ssh
+          # /api/healthz includes a database check, so it gates readiness
+          # only. Liveness is a plain TCP check: a database blip should take
+          # Forgejo out of the Service, not restart it into a crash loop.
+          # The startupProbe gives up to 5 minutes for migrations and the
+          # cold start after the weekly kured reboot before liveness counts.
+          startupProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+            failureThreshold: 4
           resources:
             requests:
               memory: "512Mi"
@@ -153,7 +211,7 @@ spec:
       volumes:
         - name: db-data
           persistentVolumeClaim:
-            claimName: forgejo-db-pvc
+            claimName: forgejo-db-pvc-17
         - name: data
           persistentVolumeClaim:
             claimName: forgejo-data-pvc
@@ -252,6 +310,10 @@ spec:
       initContainers:
         - name: volume-permissions
           image: busybox:1.36
+          # Deliberately NOT guarded like init-forgejo-data: the dind
+          # container below mounts this same volume as root, so files deep in
+          # the tree can be root-owned while /data itself looks correct. The
+          # volume is 2Gi, so the full walk is cheap.
           command: ["sh", "-c", "chown -R 1000:1000 /data"]
           volumeMounts:
             - name: runner-data
@@ -329,6 +391,16 @@ spec:
             - --host=tcp://0.0.0.0:2375
             - --tls=false
             - --insecure-registry=forgejo-service.default.svc.cluster.local:3000
+            # Pod eth0 MTU is 1230: flannel VXLAN (-50) over Tailscale
+            # (1280). Docker bridges default to 1500, so job containers
+            # sent oversized packets that were silently dropped -- TLS
+            # handshakes to github.com hung ~2.5min and reset, failing
+            # validate-manifests' tooling download on most runs. --mtu
+            # covers docker0; --default-network-opt covers the per-job
+            # WORKFLOW-* networks the runner creates. Verified 2026-10-24:
+            # same download timed out at 1500, took 0.85s at 1230.
+            - --mtu=1230
+            - --default-network-opt=bridge=com.docker.network.driver.mtu=1230
           env:
             - name: DOCKER_TLS_CERTDIR
               value: ""

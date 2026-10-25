@@ -1,19 +1,9 @@
 # Redis 7 for Postiz queue/cache/throttler.
 # AUTH-enabled, password pulled from postiz-redis-secrets.
 # No AOF persistence — Redis here is a queue, not a source of truth.
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postiz-redis-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 1Gi
+# 2026-10-24: so it gets an emptyDir, not a Longhorn volume. With --save ""
+# and --appendonly no nothing was ever written to the old 1Gi PVC, yet it was
+# still snapshotted and backed up to NFS every night. Flux prunes the PVC.
 ---
 apiVersion: v1
 kind: Service
@@ -35,7 +25,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate
+    type: RollingUpdate
   selector:
     matchLabels:
       app: postiz-redis
@@ -50,7 +40,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: redis
-          image: redis:7.2-alpine
+          image: redis:7.4-alpine
           ports:
             - containerPort: 6379
           command: ["redis-server"]
@@ -70,14 +60,19 @@ spec:
               cpu: "50m"
             limits:
               memory: "128Mi"
+          # Probe exec commands do not get $(VAR) expansion (only command/args
+          # do), so the old ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+          # sent that literal string as the password. Expand it in a shell,
+          # and require PONG rather than trusting redis-cli's exit code,
+          # which is 0 for a NOAUTH error reply too.
           livenessProbe:
             exec:
-              command: ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+              command: ["sh", "-c", "redis-cli --no-auth-warning -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             exec:
-              command: ["redis-cli", "-a", "$(REDIS_PASSWORD)", "ping"]
+              command: ["sh", "-c", "redis-cli --no-auth-warning -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
             initialDelaySeconds: 3
             periodSeconds: 10
           volumeMounts:
@@ -85,5 +80,4 @@ spec:
               mountPath: /data
       volumes:
         - name: redis-data
-          persistentVolumeClaim:
-            claimName: postiz-redis-pvc
+          emptyDir: {}

@@ -8,6 +8,6 @@ spec:
   # (host-setup.sh on that node starts nfs-kernel-server and exports
   # /var/lib/longhorn-backups). Initial backups of all volumes are taken
   # manually; the daily schedule is the RecurringJob below.
-  backupTargetURL: "nfs://thinkcentre02:/var/lib/longhorn-backups"
+  backupTargetURL: "nfs://100.95.215.63:/var/lib/longhorn-backups"
   credentialSecret: ""
   pollInterval: "5m"

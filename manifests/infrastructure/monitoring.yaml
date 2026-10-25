@@ -199,10 +199,24 @@ spec:
             cpu: 250m
           limits:
             memory: 3Gi
+        affinity:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - thinkcentre01
 
     # 3. Alertmanager Configuration
     alertmanager:
       alertmanagerSpec:
+        # Mounted at /etc/alertmanager/secrets/alertmanager-webhooks/<key>,
+        # read by the url_file entries in the receivers below.
+        secrets:
+          - alertmanager-webhooks
         # Prefer node02. Soft, so a node02 outage does not leave alerting
         # Pending -- which would be the worst possible time to lose it.
         #
@@ -328,11 +342,14 @@ spec:
               repeat_interval: 4h
 
         receivers:
-          # NOTE: the ntfy URL below is a capability -- anyone who knows
-          # the topic can read these alerts and publish to it. The topic is
-          # random for that reason. ntfy.sh free tier cannot reserve topics
-          # or require auth; if you want that, self-host ntfy or move this
-          # block to a sops-encrypted alertmanager configSecret.
+          # NOTE: the ntfy and hc-ping URLs are capabilities -- anyone who
+          # knows the ntfy topic can read these alerts and publish to it, and
+          # anyone with the ping URL can keep the dead man's switch looking
+          # alive. 2026-10-24: they were inline here, in a repo described as
+          # public, so they moved to the SOPS secret
+          # manifests/secrets/alertmanager-webhooks.sops.yaml and were rotated
+          # (the old values remain in git history). url_file reads them at
+          # send time, so editing the secret needs no Alertmanager restart.
 
           # The router. Alertmanager retries a non-2xx, so the service
           # acknowledges immediately and classifies after responding.
@@ -352,7 +369,7 @@ spec:
               # second message carries almost nothing: nobody acted on the
               # first, and the condition cleared on its own. Dropping it
               # halves the volume on the noisiest route.
-              - url: https://ntfy.sh/homelab-alerts-b5b04a9b1190a542
+              - url_file: /etc/alertmanager/secrets/alertmanager-webhooks/ntfy-url
                 send_resolved: false
                 max_alerts: 0
 
@@ -361,7 +378,7 @@ spec:
               # Critical keeps send_resolved. Here the second message is
               # the point: if something woke you at 03:00, you want to know
               # it recovered without having to open Grafana to find out.
-              - url: https://ntfy.sh/homelab-alerts-b5b04a9b1190a542
+              - url_file: /etc/alertmanager/secrets/alertmanager-webhooks/ntfy-critical-url
                 send_resolved: true
                 max_alerts: 0
 
@@ -373,7 +390,7 @@ spec:
               # three are missed. Like the ntfy topic, this URL is a
               # capability -- anyone holding it can ping the check and keep
               # it looking alive, so treat it as a secret.
-              - url: https://hc-ping.com/bc2e331a-8720-4797-b3bb-048da093ff8b
+              - url_file: /etc/alertmanager/secrets/alertmanager-webhooks/hc-ping-url
                 send_resolved: false
 
         inhibit_rules:
