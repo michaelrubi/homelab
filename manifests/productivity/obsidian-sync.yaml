@@ -96,7 +96,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       initContainers:
       - name: copy-config
-        image: couchdb:3.5.2
+        image: couchdb:3.5.3
         command: ['sh', '-c', 'cp /tmp/config/10-obsidian-cors.ini /opt/couchdb/etc/local.d/10-obsidian-cors.ini']
         volumeMounts:
         - name: couchdb-config-source
@@ -105,7 +105,7 @@ spec:
           mountPath: /opt/couchdb/etc/local.d
       containers:
       - name: couchdb
-        image: couchdb:3.5.2
+        image: couchdb:3.5.3
         env:
         - name: COUCHDB_USER
           valueFrom:
