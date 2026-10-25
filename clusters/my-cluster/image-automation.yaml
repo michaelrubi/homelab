@@ -1,0 +1,78 @@
+# Torrenter continuous deployment (2026-10-24)
+#
+# GitHub Actions in michaelrubi/torrenter builds every push to main and
+# publishes mrubi86/torrenter:main-<sha7>-<commit unix time> to Docker Hub.
+# These objects close the loop inside the cluster:
+#
+#   ImageRepository        lists the Docker Hub tags every 5m (public repo,
+#                          tag listing does not count against pull limits)
+#   ImagePolicy            picks the highest <commit unix time>
+#   ImageUpdateAutomation  rewrites the `$imagepolicy` marker in
+#                          manifests/media/torrenter.yaml and pushes the change
+#                          to main; the `manifests` Kustomization then rolls
+#                          it out like any other commit.
+#
+# Replaces the old ":latest + kubectl rollout restart" routine, which Flux
+# could never trigger because the manifest never changed.
+#
+# Lives here rather than under manifests/ so the flux-system Kustomization
+# applies it in the same pass as the CRDs in
+# flux-system/gotk-components-image.yaml (kustomize-controller applies CRDs
+# first). Under manifests/ the first reconcile would fail its dry-run and
+# block every other app until the next retry.
+#
+# The push uses the flux-system GitRepository's `forgejo-auth` credential, so
+# that token needs write access to michael/homelab.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: torrenter
+  namespace: flux-system
+spec:
+  image: mrubi86/torrenter
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: torrenter
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: torrenter
+  filterTags:
+    pattern: '^main-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        name: fluxcdbot
+        email: fluxcdbot@users.noreply.git.rubiconetic.com
+      messageTemplate: |
+        chore(deploy): update images
+
+        {{ range .Changed.Changes -}}
+        {{ .OldValue }} -> {{ .NewValue }}
+        {{ end -}}
+    push:
+      branch: main
+  update:
+    path: ./manifests
+    strategy: Setters

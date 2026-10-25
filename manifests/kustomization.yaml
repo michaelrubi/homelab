@@ -68,6 +68,7 @@ resources:
 - productivity/kaneo-postgres.yaml
 - productivity/kaneo.yaml
 - secrets/secrets.sops.yaml
+- secrets/alertmanager-webhooks.sops.yaml
 - productivity/obsidian-sync.yaml
 - social/postiz-app.yaml
 - social/postiz-instagram-provider-js-configmap.yaml
@@ -107,7 +108,7 @@ resources:
 patches:
   - target:
       kind: Deployment
-      name: ^(postiz|postiz-postgres|postiz-redis|postiz-temporal|postiz-temporal-postgres|postiz-temporal-elasticsearch|kaneo|kaneo-postgres|couchdb)$
+      name: ^(postiz|postiz-postgres|postiz-redis|postiz-temporal|postiz-temporal-postgres|postiz-temporal-elasticsearch|kaneo|kaneo-postgres|couchdb|homepage|torrenter)$
     patch: |-
       - op: add
         path: /spec/template/spec/affinity
@@ -121,3 +122,19 @@ patches:
                       operator: In
                       values:
                         - thinkcentre02
+  - target:
+      kind: Deployment
+      name: ^(stalwart|jackett-deployment|vaultwarden|postgres|n8n-deployment)$
+    patch: |-
+      - op: add
+        path: /spec/template/spec/affinity
+        value:
+          nodeAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - thinkcentre01

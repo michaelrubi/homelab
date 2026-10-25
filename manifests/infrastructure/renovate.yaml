@@ -30,7 +30,7 @@ spec:
         spec:
           containers:
             - name: renovate
-              image: renovate/renovate:42.74.1
+              image: renovate/renovate:42.99.0
               imagePullPolicy: IfNotPresent
               env:
                 # Tell Renovate we are using Forgejo

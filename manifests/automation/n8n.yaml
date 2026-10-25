@@ -76,7 +76,7 @@ spec:
               "n8n-nodes-forgejo": "0.2.0",
               "@mendable/n8n-nodes-firecrawl": "2.1.2",
               "n8n-nodes-webcrawlerapi": "0.3.7",
-              "n8n-nodes-scoro": "0.2.1",
+              "n8n-nodes-scoro": "^1.1.0",
               "n8n-nodes-run-node-with-credentials-x": "0.4.1",
               "@gotohuman/n8n-nodes-gotohuman": "0.3.0",
               "n8n-nodes-instantly": "0.1.7547",
@@ -94,6 +94,7 @@ spec:
             echo 'Installing custom nodes...'
             npm install --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund || { echo 'npm install FAILED'; exit 1; }
             printf '%s' "$WANT" > "$STAMP"
+            INSTALLED=1
           fi
           echo 'Verifying packages...'
           for pkg in n8n-nodes-minimax-chat @kenkaiii/n8n-nodes-supercode n8n-nodes-forgejo @mendable/n8n-nodes-firecrawl n8n-nodes-webcrawlerapi n8n-nodes-scoro; do
@@ -104,7 +105,12 @@ spec:
             echo "  OK: $pkg"
           done
           echo 'All custom nodes installed successfully.'
-          chown -R 1000:1000 /home/node/.n8n || true
+          # npm runs as root, so a fresh install leaves root-owned files that
+          # need handing back to uid 1000. Otherwise skip the chown -R: walking
+          # every node_modules file on each restart was pure overhead.
+          if [ "${INSTALLED:-0}" = 1 ] || [ "$(stat -c '%u:%g' /home/node/.n8n)" != "1000:1000" ]; then
+            chown -R 1000:1000 /home/node/.n8n || true
+          fi
         volumeMounts:
         - name: n8n-data
           mountPath: /home/node/.n8n
@@ -114,7 +120,7 @@ spec:
 
       containers:
       - name: n8n
-        image: docker.n8n.io/n8nio/n8n:2.41.3
+        image: docker.n8n.io/n8nio/n8n:2.45.3
         ports:
         - containerPort: 5678
         resources:
