@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: docker
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Create throwaway Dockerfile
         run: |
           printf 'FROM alpine:3.20\nRUN echo "built by forgejo runner" > /built.txt\n' > Dockerfile
