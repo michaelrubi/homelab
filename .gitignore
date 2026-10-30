@@ -6,6 +6,10 @@ secrets.plain.yaml
 .plans/
 .walkthroughs/
 .agent/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
 # Source clones made during research / subagent source-grep sessions.
 # Re-clone if needed; not worth tracking.
 research/
