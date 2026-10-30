@@ -56,6 +56,7 @@ resources:
 - infrastructure/longhorn-monitor.yaml
 - infrastructure/longhorn.yaml
 - infrastructure/monitoring.yaml
+- infrastructure/offsite-backup.yaml
 - infrastructure/pgweb.yaml
 - infrastructure/postgres-dump.yaml
 - infrastructure/reliability-alerts.yaml
