@@ -78,7 +78,7 @@ spec:
           # :latest, but the chart and workflow build with bare semver).
           # imagePullPolicy default = IfNotPresent; kubelet skips re-pull when
           # the local digest matches.
-          image: ghcr.io/usekaneo/kaneo:2.12.1
+          image: ghcr.io/usekaneo/kaneo:2.32.0
           ports:
             - name: http
               containerPort: 5173
