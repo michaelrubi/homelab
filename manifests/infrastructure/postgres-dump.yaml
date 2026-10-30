@@ -15,7 +15,7 @@
 # BackupCronJobStale rule in reliability-alerts.yaml by name.
 #
 # Forgejo's database is not here: it is a sidecar on 127.0.0.1 with no
-# Service. See docs/forgejo-postgres-upgrade.md.
+# Service. See docs/runbooks/forgejo-postgres-upgrade.md.
 apiVersion: v1
 kind: PersistentVolume
 metadata:

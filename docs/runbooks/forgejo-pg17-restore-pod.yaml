@@ -1,4 +1,4 @@
-# One-off pod for docs/forgejo-postgres-upgrade.md. NOT part of the
+# One-off pod for docs/runbooks/forgejo-postgres-upgrade.md. NOT part of the
 # kustomization: apply it by hand during the upgrade and delete it afterwards.
 #
 # It initialises an empty PG17 cluster on forgejo-db-pvc-17 with the same
