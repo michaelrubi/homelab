@@ -1,0 +1,45 @@
+# Checks formatting and validity of every Terraform stack on each change.
+#
+# `init -backend=false` needs no AWS credentials, so this runs safely on pull
+# requests. It cannot catch what only a plan would show, so `terraform plan`
+# still happens by hand before any apply.
+name: validate-terraform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+  pull_request:
+    paths:
+      - "terraform/**"
+  workflow_dispatch:
+
+env:
+  TERRAFORM_VERSION: "1.17.1"
+
+jobs:
+  validate:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Terraform
+        run: |
+          set -eu
+          curl -sSL -o /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          unzip -q /tmp/terraform.zip -d /usr/local/bin
+          terraform version
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive terraform
+
+      - name: Validate stacks
+        run: |
+          set -eu
+          for stack in terraform/*/; do
+            echo "validating ${stack}"
+            terraform -chdir="${stack}" init -backend=false -input=false
+            terraform -chdir="${stack}" validate
+          done

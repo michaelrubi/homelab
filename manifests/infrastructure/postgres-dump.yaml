@@ -1,4 +1,4 @@
-# Off-cluster pg_dumpall of the standalone postgres for belt-and-suspenders
+# Daily pg_dumpall of the standalone postgres for belt-and-suspenders
 # application-consistent backups. The Longhorn volume backup covers the data
 # files too, but pg_dump gives us clean restore points and granular recovery.
 #

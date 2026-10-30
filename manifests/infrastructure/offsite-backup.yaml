@@ -1,0 +1,160 @@
+# Off-site copy of /var/lib/longhorn-backups, sent to S3 with restic.
+#
+# Everything in that directory sits on one disk in thinkcentre02, alongside
+# that node's Longhorn replicas. This job is what makes the backups survive
+# losing that disk. Bucket and IAM are in terraform/offsite-backups.
+#
+# Runs at 05:00, after the 03:00 Longhorn window and the 04:00-04:30 dumps, so
+# each night's snapshot holds that night's backups. Both job names match the
+# BackupCronJobStale and BackupCronJobNeverSucceeded rules.
+#
+# Retention is 7 daily, 4 weekly, 6 monthly. A month of Longhorn's incremental
+# blocks is why the monthly tier is worth having: the Forgejo repository loss
+# took 3.5 months to notice, far longer than the 7 days kept locally.
+#
+# Runs as root because Longhorn writes the backupstore as root. The NFS mount
+# is read-only, so a bug here cannot damage the local backups.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: longhorn-backups-nfs-ro
+  labels:
+    purpose: offsite-backup
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    # Tailscale IP, not the hostname. See postgres-dumps-nfs in
+    # postgres-dump.yaml for why the hostname fails from both nodes.
+    server: 100.95.215.63
+    path: /var/lib/longhorn-backups
+    readOnly: true
+  mountOptions:
+    - hard
+    - nfsvers=4
+    - nolock
+    - noatime
+    - timeo=30
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-backups-ro
+  namespace: default
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: ""
+  volumeName: longhorn-backups-nfs-ro
+  volumeMode: Filesystem
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: offsite-backup
+  namespace: default
+  labels:
+    app: offsite-backup
+spec:
+  schedule: "0 5 * * *"
+  timeZone: "America/Phoenix"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  # `cat config` fails only when the repository does not exist.
+                  restic cat config >/dev/null 2>&1 || restic init
+                  restic backup /backups --host thinkcentre02 --tag nightly
+                  restic forget --host thinkcentre02 --tag nightly \
+                    --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              envFrom:
+                - secretRef:
+                    name: offsite-backup-secrets
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  memory: "1Gi"
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                  readOnly: true
+                - name: cache
+                  mountPath: /cache
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: longhorn-backups-ro
+                readOnly: true
+            - name: cache
+              emptyDir: {}
+---
+# Proves the off-site data can be read back, not only that uploads succeeded.
+# Downloads and verifies a different 5% each week, which keeps egress small.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: offsite-backup-check
+  namespace: default
+  labels:
+    app: offsite-backup
+spec:
+  schedule: "0 7 * * 0"
+  timeZone: "America/Phoenix"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 604800
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1
+              command: ["/bin/sh", "-ec"]
+              args:
+                - restic check --read-data-subset=5%
+              envFrom:
+                - secretRef:
+                    name: offsite-backup-secrets
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  memory: "1Gi"
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
+          volumes:
+            - name: cache
+              emptyDir: {}
