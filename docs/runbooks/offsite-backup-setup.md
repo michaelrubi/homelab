@@ -15,7 +15,7 @@ mise use -g aws-cli restic terraform
 ```
 
 ```bash
-aws configure
+aws configure sso
 ```
 
 ```bash
