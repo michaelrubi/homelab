@@ -122,7 +122,7 @@ spec:
           # imagePullPolicy: IfNotPresent lets the kubelet skip re-pulling when the
           # local digest matches — equivalent to what :latest gives you, but with a
           # reproducible identity across reconciles.
-          image: ghcr.io/gitroomhq/postiz-app:v2.25.0
+          image: ghcr.io/gitroomhq/postiz-app:v2.25.3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
