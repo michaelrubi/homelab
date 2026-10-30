@@ -17,7 +17,7 @@ spec:
       storage: 5Gi
 ---
 # PG_VERSION=17. Populated from a pg_dumpall of the 14 cluster, not by
-# pointing 17 at the old files. See docs/forgejo-postgres-upgrade.md.
+# pointing 17 at the old files. See docs/runbooks/forgejo-postgres-upgrade.md.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -107,7 +107,7 @@ spec:
           #
           # 2026-10: upgraded 14 -> 17 (14 is EOL Nov 2026) by dump and
           # restore into a NEW volume, leaving the 14 volume untouched for
-          # rollback. docs/forgejo-postgres-upgrade.md is the procedure;
+          # rollback. docs/runbooks/forgejo-postgres-upgrade.md is the procedure;
           # reuse it for the next major.
           image: postgres:17-alpine
           env:
