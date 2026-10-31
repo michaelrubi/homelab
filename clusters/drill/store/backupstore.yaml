@@ -116,6 +116,9 @@ spec:
             - --host=thinkcentre02
             - --tag=nightly
             - --target=/target
+            # NFS refuses this attribute, and restic exits 1 even though the
+            # data restored in full. Seen in the first drill, 2026-10-31.
+            - --exclude-xattr=security.selinux
           envFrom:
             - secretRef:
                 name: drill-restic

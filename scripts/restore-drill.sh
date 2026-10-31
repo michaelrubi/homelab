@@ -130,9 +130,12 @@ spec:
 EOF
 }
 
+# Don't wait for "detached": the waiting Forgejo pod attaches the volume as soon
+# as the restore ends, so that state can pass between two polls. It did in the
+# first drill, and the step hung for 2.5 hours with Forgejo already running.
 wait_restored() {
   until [[ "$(k -n longhorn-system get volumes.longhorn.io "$1" -o json |
-    jq -r '.status.restoreRequired == false and .status.state == "detached"')" == true ]]; do
+    jq -r '.status.restoreRequired == false')" == true ]]; do
     sleep 10
   done
   log "volumes: $1 restored"
@@ -140,7 +143,8 @@ wait_restored() {
 
 volumes() {
   require_drill
-  k wait --for=condition=complete --timeout=60m job/drill-restic-restore
+  # Set SKIP_RESTIC_WAIT=1 to resume after the Job has already done its work.
+  [[ -n "${SKIP_RESTIC_WAIT:-}" ]] || k wait --for=condition=complete --timeout=90m job/drill-restic-restore
   log "volumes: backupstore rebuilt from S3"
 
   until k -n longhorn-system get backupvolumes.longhorn.io -o name | grep -q .; do

@@ -80,6 +80,7 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 - [Secrets wiped, then silently reverted](docs/postmortems/2026-09-secrets-wipe-and-stale-reencrypt.md): an empty file made Flux delete 21 Secrets, and the recovery habit caused an outage five weeks later.
 - [Forgejo repositories lost their git data](docs/postmortems/2026-06-forgejo-repository-loss.md): 37 repositories lost their objects, and backups had already aged out.
 - [Postiz down for 15 hours on an image pull](docs/postmortems/2026-10-postiz-image-pull.md): a bad pull credential met a routine update, and alerts fired that never reached the phone.
+- [First EKS restore drill](docs/postmortems/2026-10-eks-restore-drill.md): Forgejo and Kaneo restored from S3 alone, and the drill's own script hung for 2.5 hours.
 
 ## Backups
 
@@ -91,11 +92,13 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 
 The S3 bucket, IAM user, and budget alert are [Terraform](terraform/offsite-backups/main.tf). The bucket is versioned, and the restic key can't remove versions or change bucket settings, so a stolen key can hide data for up to 30 days but can't destroy it. A weekly job downloads and verifies 5% of the data.
 
-Dump jobs and the off-site job alert if they miss a run. On 2026-10-30, the first off-site backup was restored from S3 and the Postgres dumps matched the originals exactly. Volume backups have not had a full restore drill yet.
+Dump jobs and the off-site job alert if they miss a run. On 2026-10-30, the first off-site backup was restored from S3 and the Postgres dumps matched the originals exactly.
+
+On 2026-10-31, a [timed drill](docs/runbooks/eks-restore-drill.md) restored Forgejo and Kaneo into a temporary EKS cluster from S3 alone. Forgejo was ready in 1 hour 19 minutes, about 19 of them lost to an error in the drill. All 77 repositories came back with no `git fsck` failures, and Kaneo's row counts matched exactly. The [write-up](docs/postmortems/2026-10-eks-restore-drill.md) covers everything that went wrong.
 
 ## Known limitations
 
-- **Volume restore is unproven.** Only the Postgres dumps have been restored from S3 so far.
+- **Restores can lose up to a day.** Volume backups run daily, and the drill restored only Forgejo and Kaneo, not the whole stack.
 - **Single control plane.** Losing thinkcentre01 stops scheduling and API access until it returns.
 - **Two nodes can't absorb much.** Total requests exceed one node's capacity, so a long node outage means degraded service.
 - **No NetworkPolicies yet,** and most workloads share the `default` namespace.
@@ -124,7 +127,7 @@ terraform/             AWS state bucket and off-site backup infrastructure
 ## Roadmap
 
 - [x] Off-site backups, with Terraform-managed storage
-- [ ] Timed restore drill into a temporary cloud cluster
+- [x] Timed restore drill into a temporary cloud cluster
 - [ ] Alert-router as its own repo with tests, signed images, and metrics
 - [ ] NetworkPolicies and per-application namespaces
 
