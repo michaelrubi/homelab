@@ -1,6 +1,6 @@
 # Runbook: EKS restore drill
 
-**Status:** plan, not yet run.
+**Status:** run once, on 2026-10-31. It passed, and Forgejo was ready in 1 hour 19 minutes. See the [post-mortem](../postmortems/2026-10-eks-restore-drill.md). Its two script fixes haven't been run yet.
 
 Restores two applications from the S3 backup into a temporary EKS cluster, times it, proves the data is correct, and destroys the cluster. It closes the "Volume restore is unproven" limitation in the README.
 
@@ -51,7 +51,7 @@ Don't print any of these into a chat. Run them in a terminal outside the app.
 | EBS and public IPv4 | about $0.03 |
 | **Total** | **about $0.30** |
 
-About $1 for a three-hour run, and under $3 with a retry. The `t3.large` rate of $0.0832 was checked against the AWS Price List on 2026-10-31, and the EBS and IPv4 figure is an estimate. A version in extended support costs $0.60 an hour for the control plane, so check the version first.
+About $1 for a three-hour run, and under $3 with a retry. The first drill ran for about four hours, for about $1.20. The `t3.large` rate of $0.0832 was checked against the AWS Price List on 2026-10-31, and the EBS and IPv4 figure is an estimate. A version in extended support costs $0.60 an hour for the control plane, so check the version first.
 
 A forgotten cluster costs about $7 a day, so the run isn't over until the check in step 8 passes.
 
@@ -93,11 +93,13 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh secrets
    ```
 
-5. **Restore.** Waits for restic to rebuild the backupstore, then restores `forgejo-data-pvc` and `forgejo-db-pvc-17` and waits for Forgejo:
+5. **Restore.** Waits for restic to rebuild the backupstore, then restores `forgejo-data-pvc` and `forgejo-db-pvc-17` and waits for Forgejo. Restic took 43 minutes in the first drill, and the volumes took a few more. The step prints nothing while it waits, so check `kubectl get pods` and the volume states if it goes quiet for long after that:
 
    ```bash
    scripts/restore-drill.sh volumes
    ```
+
+   If the Job has already restored the data, resume with `SKIP_RESTIC_WAIT=1 scripts/restore-drill.sh volumes`.
 
 6. **Load Kaneo.** Loads the dump, then starts the app. Stop the clock when this finishes:
 
@@ -105,7 +107,7 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh kaneo
    ```
 
-7. **Verify** against step 1. Refs and row counts can differ only for changes made after the snapshot, and the data's age is the recovery point. Also clone one repo through `kubectl port-forward` and check `/api/health` on Kaneo:
+7. **Verify** against step 1. Refs and row counts can differ only for changes made after the snapshot, and the data's age is the recovery point. Also clone a public repo that has refs through `kubectl port-forward`, because 35 repos are empty, and check `/api/health` on Kaneo:
 
    ```bash
    scripts/restore-drill.sh verify
@@ -121,15 +123,17 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh teardown-check
    ```
 
+   Then remove the `restore-drill` context, cluster and user from your kubeconfig.
+
 9. **Write it up** in `docs/postmortems/`, including everything that went wrong. Update the README, and add the measured time to the resumes.
 
-## Known unknowns
+## What the first drill settled
 
-- **Longhorn on Amazon Linux 2023.** Longhorn needs iSCSI and NFS client tools on the node. Whether the EKS image has them is unverified, so the launch template installs them at boot.
-- **The in-cluster NFS server.** It's Longhorn's own test image with a patched start script, and the patch hasn't run yet.
-- **Kaneo's dump.** `pg_dumpall` from a Postgres 17 client is loaded into a Postgres 16 server, so some statements may fail. The load log and row counts will show what mattered.
-- **Longhorn v1.10.1 on Kubernetes 1.34.** The release notes set a floor of 1.25 and no stated maximum, but no source lists 1.34 as tested. If it won't run there, record the mismatch in the write-up.
-- **Fallback for step 4.** Longhorn's documented offline recovery writes a backup to a raw image without a running Longhorn system. This is the route if the install is blocked, but it proves less.
+- **Longhorn on Amazon Linux 2023.** It runs, with the launch template installing the iSCSI and NFS client tools at boot.
+- **The in-cluster NFS server.** The patched test image works.
+- **Kaneo's dump.** `pg_dumpall` from a Postgres 17 client loads into a Postgres 16 server. Expect 6 harmless errors: the existing role and database, and four for `transaction_timeout`.
+- **Longhorn v1.10.1 on Kubernetes 1.34.** It worked for this drill, though no source lists 1.34 as tested.
+- **Fallback if Longhorn won't install.** Longhorn's documented offline recovery writes a backup to a raw image without a running Longhorn system. It wasn't needed, and it proves less.
 
 ## Pass criteria
 
