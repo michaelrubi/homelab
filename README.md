@@ -79,6 +79,7 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 - [Five days of silent alerts](docs/postmortems/2026-09-silent-alerts.md): a node ran out of memory, Prometheus filled its disk, and alerts had been going nowhere.
 - [Secrets wiped, then silently reverted](docs/postmortems/2026-09-secrets-wipe-and-stale-reencrypt.md): an empty file made Flux delete 21 Secrets, and the recovery habit caused an outage five weeks later.
 - [Forgejo repositories lost their git data](docs/postmortems/2026-06-forgejo-repository-loss.md): 37 repositories lost their objects, and backups had already aged out.
+- [Postiz down for 15 hours on an image pull](docs/postmortems/2026-10-postiz-image-pull.md): a bad pull credential met a routine update, and alerts fired that never reached the phone.
 
 ## Backups
 
@@ -86,12 +87,15 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 | :--- | :--- | :--- | :--- |
 | Longhorn volume backups | Daily, 03:00 | 7 days | NFS on thinkcentre02 |
 | `pg_dumpall` for each application database | Daily, 04:00 to 04:30 | 7 days | NFS on thinkcentre02 |
+| Encrypted restic copy of both layers and etcd snapshots | Daily, 05:00 | 7 daily, 4 weekly, 6 monthly | AWS S3 |
 
-Dump jobs alert if they miss a run. The Forgejo Postgres 14 to 17 upgrade was a real dump-and-restore, but the volume backups have not had a full restore drill yet.
+The S3 bucket, IAM user, and budget alert are [Terraform](terraform/offsite-backups/main.tf). The bucket is versioned, and the restic key can't remove versions or change bucket settings, so a stolen key can hide data for up to 30 days but can't destroy it. A weekly job downloads and verifies 5% of the data.
+
+Dump jobs and the off-site job alert if they miss a run. On 2026-10-30, the first off-site backup was restored from S3 and the Postgres dumps matched the originals exactly. Volume backups have not had a full restore drill yet.
 
 ## Known limitations
 
-- **No off-site backup yet.** Backups sit on a cluster node, on the same disk as its Longhorn replicas, so one disk failure could lose both. This is the top priority.
+- **Volume restore is unproven.** Only the Postgres dumps have been restored from S3 so far.
 - **Single control plane.** Losing thinkcentre01 stops scheduling and API access until it returns.
 - **Two nodes can't absorb much.** Total requests exceed one node's capacity, so a long node outage means degraded service.
 - **No NetworkPolicies yet,** and most workloads share the `default` namespace.
@@ -114,11 +118,12 @@ docs/
   runbooks/            Step-by-step operational procedures
   archive/             Finished plans and research
 scripts/               Git hooks and the alert-router test harness
+terraform/             AWS state bucket and off-site backup infrastructure
 ```
 
 ## Roadmap
 
-- [ ] Off-site backups, with Terraform-managed storage
+- [x] Off-site backups, with Terraform-managed storage
 - [ ] Timed restore drill into a temporary cloud cluster
 - [ ] Alert-router as its own repo with tests, signed images, and metrics
 - [ ] NetworkPolicies and per-application namespaces
