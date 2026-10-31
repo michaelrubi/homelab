@@ -1,6 +1,6 @@
 # Runbook: EKS restore drill
 
-**Status:** run once, on 2026-10-31. It passed, and Forgejo was ready in 1 hour 19 minutes. See the [post-mortem](../postmortems/2026-10-eks-restore-drill.md). Its two script fixes haven't been run yet.
+**Status:** run once, on 2026-10-31. It passed, and Forgejo was ready in 1 hour 19 minutes. See the [post-mortem](../postmortems/2026-10-eks-restore-drill.md). Its script fixes haven't been run on a cluster yet.
 
 Restores two applications from the S3 backup into a temporary EKS cluster, times it, proves the data is correct, and destroys the cluster. It closes the "Volume restore is unproven" limitation in the README.
 
@@ -93,7 +93,7 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh secrets
    ```
 
-5. **Restore.** Waits for restic to rebuild the backupstore, then restores `forgejo-data-pvc` and `forgejo-db-pvc-17` and waits for Forgejo. Restic took 43 minutes in the first drill, and the volumes took a few more. The step prints nothing while it waits, so check `kubectl get pods` and the volume states if it goes quiet for long after that:
+5. **Restore.** Waits for restic to rebuild the backupstore, then restores `forgejo-data-pvc` and `forgejo-db-pvc-17` and waits for Forgejo. Restic took 43 minutes in the first drill, and the volumes took a few more. The step prints nothing while it waits, so check `kubectl get pods` and the volume states if it goes quiet for long after that. Each volume wait stops the step after 30 minutes, and `WAIT_TIMEOUT` (in seconds) changes that:
 
    ```bash
    scripts/restore-drill.sh volumes
