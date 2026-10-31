@@ -140,15 +140,36 @@ data:
         except Exception as e:
             return "page_now", 0.0, type(e).__name__
 
-    def to_ntfy(raw, tags=None, priority=None):
+    def format_page(payload):
+        """(title, body) for a phone. Raw Alertmanager JSON is about 2,000
+        characters with no title, which is unreadable in a notification."""
+        alerts = payload.get("alerts", [])
+        lab = alerts[0].get("labels", {}) if alerts else {}
+        title = f"{lab.get('alertname', '?')} ({lab.get('namespace', 'cluster')})"
+        lines = []
+        for a in alerts[:5]:
+            ann = a.get("annotations", {})
+            lines.append(ann.get("summary") or ann.get("description")
+                         or a.get("labels", {}).get("alertname", "?"))
+        if len(alerts) > 5:
+            lines.append(f"...and {len(alerts) - 5} more")
+        detail = alerts[0].get("annotations", {}).get("description", "") if alerts else ""
+        if detail and detail not in lines:
+            lines.append(detail[:300])
+        return title, "\n".join(lines)
+
+    def to_ntfy(raw, tags=None, priority=None, title=None):
         if not NTFY_URL:
             log(event="ntfy_unconfigured")
             return False
-        hdr = {"Content-Type": "application/json"}
+        hdr = {"Content-Type": "text/plain; charset=utf-8"}
         if tags:
             hdr["X-Tags"] = tags
         if priority:
             hdr["X-Priority"] = priority
+        if title:
+            # Headers are latin-1 on the wire, so keep the title plain ASCII.
+            hdr["X-Title"] = title.encode("ascii", "replace").decode()
         try:
             urllib.request.urlopen(
                 urllib.request.Request(NTFY_URL, raw, hdr), timeout=10).read()
@@ -247,7 +268,14 @@ data:
                 status=payload.get("status"))
 
             if disp == "page_now":
-                to_ntfy(raw)
+                # Fail open here too: a formatting bug must not lose the page.
+                try:
+                    title, body = format_page(payload)
+                    to_ntfy(body.encode(), tags="rotating_light",
+                            priority="high", title=title)
+                except Exception as e:
+                    log(event="format_error", error=type(e).__name__)
+                    to_ntfy(raw)
             elif disp == "digest":
                 with LOCK:
                     DIGEST.append(f"{name}: {payload.get('status')}")
