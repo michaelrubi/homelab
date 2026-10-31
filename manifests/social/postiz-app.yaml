@@ -110,21 +110,8 @@ spec:
       # No imagePullSecrets, on purpose. A pod-level pull secret applies to every
       # image in the pod, so when ghcr-pull-secret stopped working on 2026-10-30
       # GHCR answered 403 for the public postiz-app image too, and Postiz went
-      # down until the secret was removed.
-      #
-      # The private postiz-ai-proxy sidecar still needs a pullable source. Until
-      # that package is public or has a new token, it only runs where the image
-      # is already cached, which is why this pod prefers thinkcentre02.
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                      - thinkcentre02
+      # down until the secret was removed. Both images are public now, so the
+      # pod needs no pull credential and can run on either node.
       containers:
         - name: postiz
           # Pinned to v2.21.10 (2026-06-22) — fixes PSA-2026-NWZN9J.
