@@ -87,8 +87,8 @@ The Kaneo load reported 6 errors, and none mattered: the role and database alrea
 | :--- | :--- |
 | Skip `security.selinux` in the restic Job | Done, not yet run |
 | Wait on `restoreRequired` alone in `wait_restored` | Done, not yet run |
-| Pin the Forgejo image so upgrades go through review | Open |
-| Add a timeout to `wait_restored` | Open |
+| Pin the Forgejo image so upgrades go through review | Done, pinned to 15.0.2, the build production runs |
+| Add a timeout to `wait_restored` and the other polling wait | Done, not yet run on a cluster |
 | Decide whether a day of Forgejo data loss is acceptable | Open |
 | Clean up the 35 repositories with no git data | Open |
 | Re-run the drill to confirm both fixes and the one-hour estimate | Open |

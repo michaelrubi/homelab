@@ -18,9 +18,24 @@ PROD=${PROD_CONTEXT:-default}
 OUT=${DRILL_OUTPUT:-./drill-output}
 REGION=us-west-2
 NFS_URL=nfs://172.20.200.50:/opt/backupstore
+WAIT_TIMEOUT=${WAIT_TIMEOUT:-1800}
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 k() { kubectl --context "$DRILL" "$@"; }
+
+# Polls until a command succeeds, and stops the step if it never does. A silent
+# wait looks the same as a slow one, so none of them may run forever.
+wait_for() {
+  local what=$1 deadline=$((SECONDS + WAIT_TIMEOUT))
+  shift
+  until "$@"; do
+    ((SECONDS < deadline)) || {
+      echo "Timed out after ${WAIT_TIMEOUT}s waiting for $what" >&2
+      exit 1
+    }
+    sleep 10
+  done
+}
 
 require_drill() {
   [[ "$(kubectl config get-contexts -o name)" == *"$DRILL"* ]] || {
@@ -130,14 +145,20 @@ spec:
 EOF
 }
 
+backup_volumes_listed() {
+  k -n longhorn-system get backupvolumes.longhorn.io -o name | grep -q .
+}
+
 # Don't wait for "detached": the waiting Forgejo pod attaches the volume as soon
 # as the restore ends, so that state can pass between two polls. It did in the
 # first drill, and the step hung for 2.5 hours with Forgejo already running.
+volume_restored() {
+  [[ "$(k -n longhorn-system get volumes.longhorn.io "$1" -o json |
+    jq -r '.status.restoreRequired == false')" == true ]]
+}
+
 wait_restored() {
-  until [[ "$(k -n longhorn-system get volumes.longhorn.io "$1" -o json |
-    jq -r '.status.restoreRequired == false')" == true ]]; do
-    sleep 10
-  done
+  wait_for "$1 to restore" volume_restored "$1"
   log "volumes: $1 restored"
 }
 
@@ -147,9 +168,7 @@ volumes() {
   [[ -n "${SKIP_RESTIC_WAIT:-}" ]] || k wait --for=condition=complete --timeout=90m job/drill-restic-restore
   log "volumes: backupstore rebuilt from S3"
 
-  until k -n longhorn-system get backupvolumes.longhorn.io -o name | grep -q .; do
-    sleep 10
-  done
+  wait_for "Longhorn to list the backups" backup_volumes_listed
 
   restore_volume forgejo-data-pvc drill-forgejo-data
   restore_volume forgejo-db-pvc-17 drill-forgejo-db
