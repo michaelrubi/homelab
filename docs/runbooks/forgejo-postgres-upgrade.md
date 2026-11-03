@@ -50,7 +50,7 @@ kubectl wait --for=delete pod -l app=forgejo --timeout=120s
 ## 5. Create the 17 volume and restore into it
 
 ```bash
-kubectl apply -f docs/forgejo-pg17-restore-pod.yaml
+kubectl apply -f docs/runbooks/forgejo-pg17-restore-pod.yaml
 kubectl wait --for=condition=Ready pod/forgejo-pg17-restore --timeout=180s
 gunzip -c "$DUMP" | kubectl exec -i forgejo-pg17-restore -- psql -U forgejo -d postgres -q 2>&1 | tee ~/forgejo-restore.log
 ```

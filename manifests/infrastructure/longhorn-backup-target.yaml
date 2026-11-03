@@ -4,7 +4,8 @@ metadata:
   name: default
   namespace: longhorn-system
 spec:
-  # Off-cluster NFS backup target. The NFS server runs on thinkcentre02
+  # NFS backup target, off the Longhorn volumes but still on a cluster node:
+  # offsite-backup.yaml is what protects it. The NFS server runs on thinkcentre02
   # (host-setup.sh on that node starts nfs-kernel-server and exports
   # /var/lib/longhorn-backups). Initial backups of all volumes are taken
   # manually; the daily schedule is the RecurringJob below.

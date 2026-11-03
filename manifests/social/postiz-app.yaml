@@ -107,13 +107,11 @@ spec:
               cpu: "10m"
             limits:
               memory: "64Mi"
-      imagePullSecrets:
-        # Pulls ghcr.io/rubiconetic/postiz-ai-proxy from a private GHCR
-        # package. The postiz main image is public GHCR (gitroomhq) and
-        # doesn't need this secret, but listing it at the pod level makes
-        # kubelet try the secret on every pull — harmless for public
-        # images, keeps the secret in one place.
-        - name: ghcr-pull-secret
+      # No imagePullSecrets, on purpose. A pod-level pull secret applies to every
+      # image in the pod, so when ghcr-pull-secret stopped working on 2026-10-30
+      # GHCR answered 403 for the public postiz-app image too, and Postiz went
+      # down until the secret was removed. Both images are public now, so the
+      # pod needs no pull credential and can run on either node.
       containers:
         - name: postiz
           # Pinned to v2.21.10 (2026-06-22) — fixes PSA-2026-NWZN9J.
@@ -122,7 +120,7 @@ spec:
           # imagePullPolicy: IfNotPresent lets the kubelet skip re-pulling when the
           # local digest matches — equivalent to what :latest gives you, but with a
           # reproducible identity across reconciles.
-          image: ghcr.io/gitroomhq/postiz-app:v2.25.0
+          image: ghcr.io/gitroomhq/postiz-app:v2.25.3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

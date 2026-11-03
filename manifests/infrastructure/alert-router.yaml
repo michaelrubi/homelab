@@ -36,228 +36,11 @@
 # confidence below threshold: all of them page. The failure mode of this service
 # must be "as noisy as today", never "as silent as September 6". There is no
 # code path that drops an alert because something broke.
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: alert-router-app
-  namespace: monitoring
-data:
-  router.py: |
-    # Stdlib only, deliberately. This runs on the stock python:3.12-slim image
-    # with no pip install at startup, so the alert path has no dependency on
-    # PyPI being reachable when the pod restarts -- which, for the service that
-    # carries your alerts, is the difference between a slow start and a silent
-    # one.
-    import json, os, sys, threading, time, urllib.request, urllib.error
-    from collections import Counter, deque
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-    def _clean(name, default=""):
-        # Strip whitespace and stray quoting from a URL or key read out of a
-        # Secret. providers/Secrets.js in the Omamail plugin argues against
-        # trimming a *password*, and it is right -- a password may legitimately
-        # begin or end with a space. A URL or a bearer token may not, and the
-        # failure is silent: on 2026-09-20 NTFY_URL was encrypted with a single
-        # trailing backtick copied along with a markdown code fence, the router
-        # classified perfectly, and every page it decided on was then dropped
-        # with an opaque HTTPError. Classification working while delivery does
-        # not is the worst shape this service can fail in, so the cheap guard
-        # is worth it.
-        return os.environ.get(name, default).strip().strip("`\"'").strip()
-
-    JEV_URL   = _clean("JEV_URL", "https://api.typesafe.ai/v1/systemone")
-    JEV_KEY   = _clean("JEV_API_KEY")
-    NTFY_URL  = _clean("NTFY_URL")
-    # Suppress only when Jev is at least this sure. Below it, the alert pages.
-    THRESHOLD = float(os.environ.get("SUPPRESS_CONFIDENCE", "0.85"))
-    TIMEOUT   = float(os.environ.get("JEV_TIMEOUT_SECONDS", "3"))
-    DIGEST_S  = int(os.environ.get("DIGEST_INTERVAL_SECONDS", "3600"))
-
-    M = Counter()
-    DIGEST = deque(maxlen=500)
-    LOCK = threading.Lock()
-
-    def log(**kw):
-        # One JSON object per line: `kubectl logs` is the audit trail for every
-        # suppression, and the corpus to fit a threshold on once there is a
-        # month of decisions to look at.
-        print(json.dumps({"ts": time.time(), **kw}), flush=True)
-
-    DISPOSITIONS = {
-        "page_now": "Someone must look at this within the hour: data loss, a "
-                    "backup not running, a service down, or something actively "
-                    "degrading.",
-        "digest":   "Real but not urgent. Worth seeing in a daily roundup: slow "
-                    "growth, a warning trending the wrong way, a soft limit.",
-        "suppress": "Noise. Transient, self-healing, a flap, or an artifact of "
-                    "monitoring rather than a fact about the cluster.",
-    }
-
-    def describe(payload):
-        """Flatten an Alertmanager group into something Jev can read."""
-        alerts = payload.get("alerts", [])
-        head = alerts[0] if alerts else {}
-        lab, ann = head.get("labels", {}), head.get("annotations", {})
-        return (
-            f"Alert: {lab.get('alertname','?')}\n"
-            f"Severity: {lab.get('severity','?')}\n"
-            f"Namespace: {lab.get('namespace','?')}\n"
-            f"Status: {payload.get('status','?')}\n"
-            f"Firing in group: {len(alerts)}\n"
-            f"Summary: {ann.get('summary','')}\n"
-            f"Description: {ann.get('description','')[:600]}"
-        )
-
-    def classify(state):
-        """(disposition, confidence, reason). Any failure returns page_now."""
-        if not JEV_KEY:
-            return "page_now", 0.0, "no-api-key"
-        body = json.dumps({
-            "model": "jev-latest",
-            "state": state,
-            "questions": {
-                "disposition": {
-                    "type": "choice",
-                    "instructions": (
-                        "This is a Kubernetes homelab alert. Decide how it "
-                        "should reach the operator. When genuinely unsure, "
-                        "prefer page_now -- a missed real alert costs far more "
-                        "than one unnecessary notification."),
-                    "criteria": DISPOSITIONS,
-                }
-            },
-        }).encode()
-        req = urllib.request.Request(JEV_URL, body, {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {JEV_KEY}"})
-        try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as f:
-                a = json.load(f)["answers"]["disposition"]
-            return a.get("choice", "page_now"), float(a.get("confidence", 0.0)), "ok"
-        except urllib.error.HTTPError as e:
-            return "page_now", 0.0, f"http-{e.code}"
-        except Exception as e:
-            return "page_now", 0.0, type(e).__name__
-
-    def to_ntfy(raw, tags=None, priority=None):
-        if not NTFY_URL:
-            log(event="ntfy_unconfigured")
-            return False
-        hdr = {"Content-Type": "application/json"}
-        if tags:
-            hdr["X-Tags"] = tags
-        if priority:
-            hdr["X-Priority"] = priority
-        try:
-            urllib.request.urlopen(
-                urllib.request.Request(NTFY_URL, raw, hdr), timeout=10).read()
-            return True
-        except Exception as e:
-            # Nothing to fall back to -- ntfy IS the fallback. Count it so the
-            # AlertRouterDeliveryFailing rule can fire on the real receiver.
-            M["ntfy_errors"] += 1
-            log(event="ntfy_error", error=type(e).__name__)
-            return False
-
-    def flush_digest():
-        while True:
-            time.sleep(DIGEST_S)
-            with LOCK:
-                items, DIGEST_copy = list(DIGEST), None
-                DIGEST.clear()
-            if not items:
-                continue
-            lines = "\n".join(f"- {i}" for i in items[:40])
-            msg = json.dumps({"status": "digest", "alerts": [],
-                              "digest": f"{len(items)} non-urgent alerts\n{lines}"})
-            to_ntfy(msg.encode(), tags="clipboard", priority="low")
-            log(event="digest_sent", count=len(items))
-
-    class H(BaseHTTPRequestHandler):
-        protocol_version = "HTTP/1.1"
-
-        def _reply(self, code=200, body=b"ok", ctype="text/plain"):
-            self.send_response(code)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *a):
-            pass  # structured logging only; the default writes to stderr
-
-        def do_GET(self):
-            if self.path == "/healthz":
-                return self._reply()
-            if self.path == "/metrics":
-                with LOCK:
-                    pending = len(DIGEST)
-                    snap = dict(M)
-                out = [
-                    "# HELP alert_router_decisions_total Alerts by disposition.",
-                    "# TYPE alert_router_decisions_total counter",
-                ]
-                for d in ("page_now", "digest", "suppress"):
-                    out.append(f'alert_router_decisions_total{{disposition="{d}"}} '
-                               f'{snap.get(d, 0)}')
-                for k, h in (("failopen", "Alerts forwarded because classification failed."),
-                             ("jev_errors", "Failed Jev calls."),
-                             ("ntfy_errors", "Failed deliveries to ntfy."),
-                             ("received", "Webhook payloads received.")):
-                    out += [f"# HELP alert_router_{k}_total {h}",
-                            f"# TYPE alert_router_{k}_total counter",
-                            f"alert_router_{k}_total {snap.get(k, 0)}"]
-                out += ["# HELP alert_router_digest_pending Alerts awaiting the next digest.",
-                        "# TYPE alert_router_digest_pending gauge",
-                        f"alert_router_digest_pending {pending}"]
-                return self._reply(body=("\n".join(out) + "\n").encode())
-            self._reply(404, b"not found")
-
-        def do_POST(self):
-            n = int(self.headers.get("Content-Length", 0) or 0)
-            raw = self.rfile.read(n)
-            # Acknowledge Alertmanager immediately. It retries on a non-2xx,
-            # and a retry storm on top of a slow Jev is its own outage.
-            self._reply()
-            try:
-                payload = json.loads(raw)
-            except Exception:
-                M["received"] += 1
-                M["failopen"] += 1
-                to_ntfy(raw)  # unparseable: forward it untouched
-                return
-            M["received"] += 1
-            state = describe(payload)
-            disp, conf, reason = classify(state)
-            if reason != "ok":
-                M["jev_errors"] += 1
-
-            name = (payload.get("alerts", [{}])[0]
-                    .get("labels", {}).get("alertname", "?"))
-
-            # The gate. Anything short of a confident non-urgent verdict pages.
-            if disp in ("digest", "suppress") and conf < THRESHOLD:
-                disp, reason = "page_now", f"{reason}/below-threshold({conf:.2f})"
-                M["failopen"] += 1
-
-            M[disp] += 1
-            log(event="decision", alert=name, disposition=disp,
-                confidence=round(conf, 3), reason=reason,
-                status=payload.get("status"))
-
-            if disp == "page_now":
-                to_ntfy(raw)
-            elif disp == "digest":
-                with LOCK:
-                    DIGEST.append(f"{name}: {payload.get('status')}")
-            # suppress: counted and logged, never delivered.
-
-    if __name__ == "__main__":
-        threading.Thread(target=flush_digest, daemon=True).start()
-        log(event="start", threshold=THRESHOLD, digest_interval=DIGEST_S,
-            jev_configured=bool(JEV_KEY), ntfy_configured=bool(NTFY_URL))
-        ThreadingHTTPServer(("", 8080), H).serve_forever()
+#
+# The code lives in its own repo, with tests for every fail-open path and a
+# signed image: https://git.rubiconetic.com/michael/alert-router. It used to
+# be a router.py inside a ConfigMap here. Renovate opens a PR for each new
+# release, so an upgrade is reviewed like any other change.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -265,8 +48,8 @@ metadata:
   name: alert-router
   namespace: monitoring
   annotations:
-    # Restart on a change to either the code or the key, without a manual
-    # rollout -- reloader is already running for exactly this.
+    # Restart on a change to the key or ntfy URL, without a manual rollout --
+    # reloader is already running for exactly this.
     reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
@@ -295,10 +78,14 @@ spec:
                     operator: In
                     values:
                       - thinkcentre02
+      # Room for the SIGTERM handler to send the pending digest before the
+      # kill. Recreate rollouts used to drop up to an hour of it.
+      terminationGracePeriodSeconds: 15
       containers:
         - name: router
-          image: python:3.12-slim
-          command: ["python", "-u", "/app/router.py"]
+          # Tag plus index digest: the tag says which release, the digest makes
+          # it immutable. Verify with cosign v3 (command in the repo README).
+          image: ghcr.io/michaelrubi/alert-router:0.1.0@sha256:efd5e62bef04039d18b0e337d26da35a2f3e1eaf7d09b9e53d01cbf9b5161239
           env:
             - name: JEV_API_KEY
               valueFrom:
@@ -334,9 +121,6 @@ spec:
             httpGet: {path: /healthz, port: 8080}
             initialDelaySeconds: 3
             periodSeconds: 10
-          volumeMounts:
-            - name: app
-              mountPath: /app
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
@@ -344,10 +128,6 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-      volumes:
-        - name: app
-          configMap:
-            name: alert-router-app
 ---
 apiVersion: v1
 kind: Service

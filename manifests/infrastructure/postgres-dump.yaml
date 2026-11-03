@@ -1,4 +1,4 @@
-# Off-cluster pg_dumpall of the standalone postgres for belt-and-suspenders
+# Daily pg_dumpall of the standalone postgres for belt-and-suspenders
 # application-consistent backups. The Longhorn volume backup covers the data
 # files too, but pg_dump gives us clean restore points and granular recovery.
 #
@@ -15,7 +15,7 @@
 # BackupCronJobStale rule in reliability-alerts.yaml by name.
 #
 # Forgejo's database is not here: it is a sidecar on 127.0.0.1 with no
-# Service. See docs/forgejo-postgres-upgrade.md.
+# Service. See docs/runbooks/forgejo-postgres-upgrade.md.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -84,6 +84,9 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            app: postgres-backup
         spec:
           restartPolicy: OnFailure
           # SETUP REQUIREMENT: the NFS directory on thinkcentre02 at
@@ -111,6 +114,11 @@ spec:
             args:
               - |
                 set -eu
+                # A new pod is blocked for a second or two until the network policy
+                # controller learns its IP, and without pipefail a refused connection
+                # still writes a valid, empty .gz and exits 0.
+                set -o pipefail
+                for i in $(seq 30); do pg_isready -q -h postgres && break; sleep 2; done
                 DATE=$(date -u +%Y%m%d-%H%M%S)
                 OUT=/dumps/postgres-standalone-${DATE}.sql.gz
                 echo "Dumping standalone postgres to ${OUT}..."
@@ -163,6 +171,9 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            app: postgres-backup
         spec:
           restartPolicy: OnFailure
           # Same NFS ownership requirement as postgres-dump-standalone.
@@ -177,6 +188,11 @@ spec:
             args:
               - |
                 set -eu
+                # A new pod is blocked for a second or two until the network policy
+                # controller learns its IP, and without pipefail a refused connection
+                # still writes a valid, empty .gz and exits 0.
+                set -o pipefail
+                for i in $(seq 30); do pg_isready -q -h kaneo-postgres && break; sleep 2; done
                 DATE=$(date -u +%Y%m%d-%H%M%S)
                 OUT=/dumps/postgres-kaneo-${DATE}.sql.gz
                 echo "Dumping kaneo-postgres to ${OUT}..."
@@ -227,6 +243,9 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            app: postgres-backup
         spec:
           restartPolicy: OnFailure
           # Same NFS ownership requirement as postgres-dump-standalone.
@@ -241,6 +260,11 @@ spec:
             args:
               - |
                 set -eu
+                # A new pod is blocked for a second or two until the network policy
+                # controller learns its IP, and without pipefail a refused connection
+                # still writes a valid, empty .gz and exits 0.
+                set -o pipefail
+                for i in $(seq 30); do pg_isready -q -h postiz-postgres && break; sleep 2; done
                 DATE=$(date -u +%Y%m%d-%H%M%S)
                 OUT=/dumps/postgres-postiz-${DATE}.sql.gz
                 echo "Dumping postiz-postgres to ${OUT}..."
@@ -291,6 +315,9 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            app: postgres-backup
         spec:
           restartPolicy: OnFailure
           # Same NFS ownership requirement as postgres-dump-standalone.
@@ -305,6 +332,11 @@ spec:
             args:
               - |
                 set -eu
+                # A new pod is blocked for a second or two until the network policy
+                # controller learns its IP, and without pipefail a refused connection
+                # still writes a valid, empty .gz and exits 0.
+                set -o pipefail
+                for i in $(seq 30); do pg_isready -q -h postiz-temporal-postgres && break; sleep 2; done
                 DATE=$(date -u +%Y%m%d-%H%M%S)
                 OUT=/dumps/postgres-temporal-${DATE}.sql.gz
                 echo "Dumping postiz-temporal-postgres to ${OUT}..."

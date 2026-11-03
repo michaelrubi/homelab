@@ -1,0 +1,382 @@
+# Network policies for the default namespace (2026-11-03)
+#
+# Until now any pod could open a connection to any other pod. A compromised
+# torrenter or a bad n8n workflow could reach every database directly:
+# Postiz's, Kaneo's, Temporal's, and the standalone postgres n8n keeps its
+# data in. These policies make ingress default-deny and then list who may
+# talk to whom. Egress stays open; that's the next step, and a harder one,
+# because n8n calls out to dozens of external APIs.
+#
+# K3s enforces NetworkPolicy itself (an embedded kube-router controller), so
+# there is nothing to install. Measured in a throwaway namespace before
+# writing any of this:
+#
+#   kubelet probes        Still pass under deny-all. kube-router exempts the
+#                         pod's own node, so no rule is needed for them.
+#
+#   LoadBalancer and      The pod sees the REAL client IP when it runs on the
+#   NodePort              node that took the connection, because SNAT happens
+#                         after filtering. When it runs on the other node, it
+#                         sees that node's flannel address (10.42.x.0). So
+#                         "allow kube-system" (svclb) matches nothing, and
+#                         allowing only the flannel addresses passed 50% of
+#                         requests. The rule that passed 80 of 80 is "anything
+#                         outside the pod CIDR, plus the two flannel hop
+#                         addresses": OUTSIDE_CLUSTER below.
+#
+#   New pods              Blocked for about 2s after start, until kube-router
+#                         adds the pod's IP to the allow sets. Anything that
+#                         connects immediately on start has to retry; the
+#                         postgres-dump jobs wait on pg_isready for this.
+#
+# OUTSIDE_CLUSTER doesn't change who can reach the cluster from outside. That
+# is still decided by which Services are LoadBalancers and by Tailscale and
+# Cloudflare. What it removes is pod-to-pod access. One gap is known: a pod
+# that dials a LoadBalancer through the OTHER node's IP arrives with that
+# node's flannel address and gets in like any outside client. The databases
+# aren't LoadBalancers, so this only reaches the apps that are already
+# exposed.
+#
+# Break-glass, if a policy cuts off something that matters:
+#   flux suspend kustomization manifests
+#   kubectl -n default delete networkpolicy --all
+# then fix the rule in Git and `flux resume kustomization manifests`. Suspend
+# first: Flux would put the policies back within a minute. Forgejo is Flux's
+# own git source, so if Forgejo is the thing that's cut off, a revert in Git
+# can't reach the cluster; this is the only way back.
+#
+# Adding a workload to default: it gets no ingress at all until it has a rule
+# here. That's the point, but it will look like a broken Service.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# The apps people use: through the Cloudflare tunnel, or over Tailscale/LAN to
+# a LoadBalancer IP. Databases are deliberately not in this list.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-front-doors
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - couchdb
+          - forgejo
+          - homepage
+          - jackett
+          - kaneo
+          - n8n
+          - pgweb
+          - postiz
+          - postiz-temporal-ui
+          - stalwart
+          - torrenter
+          - vaultwarden
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # OUTSIDE_CLUSTER: see the header. 10.42.0.0/16 is the cluster pod
+        # CIDR; the /32s are each node's flannel.1 address, which is what a
+        # cross-node LoadBalancer or NodePort hop arrives as.
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.42.0.0/16
+        - ipBlock:
+            cidr: 10.42.0.0/32
+        - ipBlock:
+            cidr: 10.42.1.0/32
+        - podSelector:
+            matchLabels:
+              app: cloudflared
+---
+# Flux's source of truth, plus everything that pushes, pulls or calls the API.
+# If this rule is wrong, Flux stops reconciling, including the fix for it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-forgejo-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: forgejo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # source-controller clones, notification-controller posts commit
+        # statuses, image automation pushes torrenter tag bumps.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: flux-system
+        # Job containers run inside the runner's dind sidecar, so they
+        # arrive as the runner pod.
+        - podSelector:
+            matchLabels:
+              app: forgejo-runner
+        - podSelector:
+            matchLabels:
+              app: renovate
+        # Workflow backups, Renovate auto-merge, and issue workflows.
+        - podSelector:
+            matchLabels:
+              app: n8n
+---
+# n8n is the automation hub: workflows tagged forgejo, postgres and others
+# call these apps' APIs directly. Vaultwarden and CouchDB are not on the list.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-n8n-to-apps
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - kaneo
+          - postiz
+          - stalwart
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: n8n
+---
+# Forgejo webhooks (push, PR, issue) into n8n workflows.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-n8n-webhooks
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: n8n
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: forgejo
+---
+# Mail submission and delivery are public anyway (stalwart-mail is a
+# LoadBalancer), so any pod may hand Stalwart a message. The admin UI and IMAP
+# are not included. 587 is listed for when submission is enabled; Stalwart
+# doesn't listen on it today.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-smtp-from-pods
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: stalwart
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 25
+        - port: 465
+        - port: 587
+---
+# torrenter searches through Jackett (FlareSolverr is a sidecar in the same
+# pod, so it needs no rule).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-jackett-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: jackett
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: torrenter
+---
+# Databases: each one is reachable from its own app and from the nightly dump
+# job, nothing else. pgweb is configured for the standalone postgres only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: n8n
+        - podSelector:
+            matchLabels:
+              app: pgweb
+        - podSelector:
+            matchLabels:
+              app: postgres-backup
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kaneo-postgres-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: kaneo-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: kaneo
+        - podSelector:
+            matchLabels:
+              app: postgres-backup
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postiz-postgres-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postiz-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: postiz
+        - podSelector:
+            matchLabels:
+              app: postgres-backup
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postiz-redis-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postiz-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: postiz
+      ports:
+        - port: 6379
+---
+# Temporal's own services dial each other through the Service name, so the
+# server pod has to be allowed to reach itself.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postiz-temporal-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postiz-temporal
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - postiz
+                  - postiz-temporal
+                  - postiz-temporal-ui
+                  - postiz-temporal-admin-tools
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-temporal-postgres-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postiz-temporal-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - postiz-temporal
+                  - postiz-temporal-admin-tools
+                  - postgres-backup
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-temporal-elasticsearch-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: postiz-temporal-elasticsearch
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - postiz-temporal
+                  - postiz-temporal-admin-tools
+      ports:
+        - port: 9200

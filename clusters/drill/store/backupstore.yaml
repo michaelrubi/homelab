@@ -1,0 +1,138 @@
+# Rebuilds the production backup directory from S3, then serves it over NFS,
+# which is how Longhorn reads it at home.
+#
+# The server is Longhorn's own test image. Its start script mounts an ext4 disk
+# image over the export path, so anything restored straight into that directory
+# would be hidden. That is why the Job below writes through NFS. The sed swaps
+# the script's `dd` for a sparse file, which saves zero-filling 60 GB on the
+# clock. The image only publishes `latest`, hence the digest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drill-backupstore
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: drill-backupstore
+  template:
+    metadata:
+      labels:
+        app: drill-backupstore
+    spec:
+      containers:
+        - name: nfs
+          image: longhornio/nfs-backupstore@sha256:7205d53e25c01c588c563ddab120826ee66471758d439707c03e864966bdd200
+          command:
+            - bash
+            - -c
+            - |
+              sed -i 's|^\tdd if=.*|\ttruncate -s ${NFS_DISK_IMAGE_SIZE_MB}M "${NFS_DISK_IMAGE_PATH}/data.img"|' /opt/start_nfs.sh
+              chmod 700 /opt/backupstore
+              /opt/start_nfs.sh | tee /var/log/ganesha.log
+          env:
+            - name: EXPORT_ID
+              value: "14"
+            - name: EXPORT_PATH
+              value: /opt/backupstore
+            - name: PSEUDO_PATH
+              value: /opt/backupstore
+            - name: NFS_DISK_IMAGE_SIZE_MB
+              value: "60000"
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN", "DAC_READ_SEARCH"]
+          ports:
+            - containerPort: 2049
+              protocol: TCP
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+          volumeMounts:
+            - name: export
+              mountPath: /opt/backupstore
+            - name: disk-image
+              mountPath: /var/nfs-data
+            - name: ganesha-data
+              mountPath: /usr/local/var/lib/nfs/ganesha
+      volumes:
+        - name: export
+          emptyDir: {}
+        - name: disk-image
+          emptyDir: {}
+        - name: ganesha-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: drill-backupstore
+  namespace: default
+spec:
+  # Fixed because kubelet mounts NFS from the node, outside cluster DNS.
+  clusterIP: 172.20.200.50
+  selector:
+    app: drill-backupstore
+  ports:
+    - name: nfs
+      port: 2049
+      targetPort: 2049
+      protocol: TCP
+---
+# EKS Pod Identity gives this account the read-only role in
+# terraform/restore-drill, by namespace and name.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: drill-restic
+  namespace: default
+---
+# Waits in CreateContainerConfigError until `restore-drill.sh secrets` creates
+# drill-restic. That Secret has no AWS keys, so restic falls through to the role.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drill-restic-restore
+  namespace: default
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: drill-restic
+      containers:
+        - name: restic
+          image: restic/restic:0.19.1
+          args:
+            - --no-lock
+            - --no-cache
+            - restore
+            - latest:/backups
+            - --host=thinkcentre02
+            - --tag=nightly
+            - --target=/target
+            # NFS refuses this attribute, and restic exits 1 even though the
+            # data restored in full. Seen in the first drill, 2026-10-31.
+            - --exclude-xattr=security.selinux
+          envFrom:
+            - secretRef:
+                name: drill-restic
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              memory: "2Gi"
+          volumeMounts:
+            - name: target
+              mountPath: /target
+      volumes:
+        - name: target
+          nfs:
+            server: 172.20.200.50
+            path: /opt/backupstore
