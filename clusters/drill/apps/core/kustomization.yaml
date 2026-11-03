@@ -1,0 +1,89 @@
+# The production manifests, with only what is unsafe or useless here changed.
+# Local builds need --load-restrictor LoadRestrictionsNone. Flux already builds
+# that way.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../../manifests/productivity/forgejo.yaml
+  - ../../../../manifests/productivity/kaneo-postgres.yaml
+patches:
+  # Nothing here should run CI, and the old PG14 volume isn't restored.
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: forgejo-runner
+        namespace: default
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: runner-config
+        namespace: default
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: forgejo-db-pvc
+        namespace: default
+  # Bind to the volumes `restore-drill.sh volumes` restores, not new empty ones.
+  - patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: forgejo-data-pvc
+        namespace: default
+      spec:
+        storageClassName: ""
+        volumeName: drill-forgejo-data
+  - patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: forgejo-db-pvc-17
+        namespace: default
+      spec:
+        storageClassName: ""
+        volumeName: drill-forgejo-db
+  # A LoadBalancer Service would create a billed AWS load balancer. Access is
+  # kubectl port-forward only.
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: forgejo-service
+        namespace: default
+      spec:
+        type: ClusterIP
+  # A restored Forgejo must never reach GitHub: its push mirrors force-push, and
+  # this copy is behind. Mirrors and cron are off, and hostAliases also breaks
+  # the route to github.com in case either setting doesn't take effect.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: forgejo
+        namespace: default
+      spec:
+        template:
+          spec:
+            nodeSelector: null
+            hostAliases:
+              - ip: 127.0.0.1
+                hostnames:
+                  - github.com
+                  - api.github.com
+            containers:
+              - name: forgejo
+                env:
+                  - name: FORGEJO__mirror__ENABLED
+                    value: "false"
+                  - name: FORGEJO__cron__ENABLED
+                    value: "false"
+                  - name: FORGEJO__mailer__ENABLED
+                    value: "false"
+                  - name: FORGEJO__actions__ENABLED
+                    value: "false"

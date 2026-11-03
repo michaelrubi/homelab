@@ -70,8 +70,9 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 
 ## Reliability work worth reading
 
-- **[alert-router](manifests/infrastructure/alert-router.yaml):** a small Python service that decides whether a warning pages me, goes in a digest, or is suppressed. I benchmarked model calibration first, because a local model reported 0.95 confidence on every input, including the ones it got wrong. It fails open on all seven tested failure paths, and critical alerts and the dead-man's switch bypass it entirely.
+- **[alert-router](https://git.rubiconetic.com/michael/alert-router):** a small Python service, in its own repo, that decides whether a warning pages me, goes in a digest, or is suppressed. I benchmarked model calibration first, because a local model reported 0.95 confidence on every input, including the ones it got wrong. It fails open on every error path, critical alerts and the dead-man's switch bypass it entirely, and it ships as a signed image. Moving it out of a ConfigMap and writing real tests found five ways it could still lose an alert. ([Deployment](manifests/infrastructure/alert-router.yaml))
 - **[Reliability alerts](manifests/infrastructure/reliability-alerts.yaml):** each rule exists because of a failure that went unnoticed, and the comments record the numbers.
+- **[Network policies](manifests/infrastructure/network-policies.yaml):** ingress is default-deny, and each database accepts connections only from its own app and the nightly dump. The rules came from measurements, not documentation: a LoadBalancer connection reaches the pod with the real client IP or a flannel address depending on which node took it, so the obvious "allow kube-system" rule matches nothing. [`scripts/netpol-check.sh`](scripts/netpol-check.sh) checks 46 allowed and blocked paths.
 - **[Flux alerts](manifests/infrastructure/flux-alerts.yaml):** added after a failed build silently froze every deployment for about 35 minutes.
 
 ## Post-mortems
@@ -80,6 +81,7 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 - [Secrets wiped, then silently reverted](docs/postmortems/2026-09-secrets-wipe-and-stale-reencrypt.md): an empty file made Flux delete 21 Secrets, and the recovery habit caused an outage five weeks later.
 - [Forgejo repositories lost their git data](docs/postmortems/2026-06-forgejo-repository-loss.md): 37 repositories lost their objects, and backups had already aged out.
 - [Postiz down for 15 hours on an image pull](docs/postmortems/2026-10-postiz-image-pull.md): a bad pull credential met a routine update, and alerts fired that never reached the phone.
+- [First EKS restore drill](docs/postmortems/2026-10-eks-restore-drill.md): Forgejo and Kaneo restored from S3 alone, and the drill's own script hung for 2.5 hours.
 
 ## Backups
 
@@ -91,14 +93,16 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 
 The S3 bucket, IAM user, and budget alert are [Terraform](terraform/offsite-backups/main.tf). The bucket is versioned, and the restic key can't remove versions or change bucket settings, so a stolen key can hide data for up to 30 days but can't destroy it. A weekly job downloads and verifies 5% of the data.
 
-Dump jobs and the off-site job alert if they miss a run. On 2026-10-30, the first off-site backup was restored from S3 and the Postgres dumps matched the originals exactly. Volume backups have not had a full restore drill yet.
+Dump jobs and the off-site job alert if they miss a run. On 2026-10-30, the first off-site backup was restored from S3 and the Postgres dumps matched the originals exactly.
+
+On 2026-10-31, a [timed drill](docs/runbooks/eks-restore-drill.md) restored Forgejo and Kaneo into a temporary EKS cluster from S3 alone. Forgejo was ready in 1 hour 19 minutes, about 19 of them lost to an error in the drill. All 77 repositories came back with no `git fsck` failures, and Kaneo's row counts matched exactly. The [write-up](docs/postmortems/2026-10-eks-restore-drill.md) covers everything that went wrong.
 
 ## Known limitations
 
-- **Volume restore is unproven.** Only the Postgres dumps have been restored from S3 so far.
+- **Restores can lose up to a day.** Volume backups run daily, and the drill restored only Forgejo and Kaneo, not the whole stack.
 - **Single control plane.** Losing thinkcentre01 stops scheduling and API access until it returns.
 - **Two nodes can't absorb much.** Total requests exceed one node's capacity, so a long node outage means degraded service.
-- **No NetworkPolicies yet,** and most workloads share the `default` namespace.
+- **Egress is open.** [Network policies](manifests/infrastructure/network-policies.yaml) restrict which pods can connect to which, but any pod can still connect out. Most workloads share the `default` namespace.
 - **Nodes aren't provisioned from code.** The cluster's contents are declarative, but the OS and K3s install are not.
 
 ## Repository layout
@@ -117,16 +121,17 @@ docs/
   postmortems/         What failed, why, and what changed
   runbooks/            Step-by-step operational procedures
   archive/             Finished plans and research
-scripts/               Git hooks and the alert-router test harness
+scripts/               Git hooks, the restore-drill script, and the network-policy check
 terraform/             AWS state bucket and off-site backup infrastructure
 ```
 
 ## Roadmap
 
 - [x] Off-site backups, with Terraform-managed storage
-- [ ] Timed restore drill into a temporary cloud cluster
-- [ ] Alert-router as its own repo with tests, signed images, and metrics
-- [ ] NetworkPolicies and per-application namespaces
+- [x] Timed restore drill into a temporary cloud cluster
+- [x] [Alert-router](https://git.rubiconetic.com/michael/alert-router) as its own repo with tests, signed images, and metrics
+- [x] [Default-deny ingress](manifests/infrastructure/network-policies.yaml), with each database reachable only from its own app and backups
+- [ ] Egress policies and per-application namespaces
 
 ---
 
