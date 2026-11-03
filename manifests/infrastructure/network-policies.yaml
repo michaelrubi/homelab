@@ -193,3 +193,24 @@ spec:
               app: postgres-backup
       ports:
         - port: 5432
+---
+# CouchDB's clients come in through allow-front-doors. This adds the in-cluster
+# LiveSync staleness check (livesync-staleness in obsidian-sync.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-couchdb-clients
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: couchdb
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: livesync-check
+      ports:
+        - port: 5984
