@@ -62,21 +62,3 @@ spec:
   sourceRef:
     kind: GitRepository
     name: homelab
----
-# Suspended until the dump is loaded. Kaneo runs its migrations at startup, so
-# starting it first would race the restore. `restore-drill.sh kaneo` resumes it.
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: drill-kaneo
-  namespace: flux-system
-spec:
-  suspend: true
-  dependsOn:
-    - name: drill-apps
-  interval: 10m
-  path: ./clusters/drill/apps/kaneo
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: homelab

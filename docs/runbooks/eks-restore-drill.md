@@ -2,14 +2,15 @@
 
 **Status:** run once, on 2026-10-31. It passed, and Forgejo was ready in 1 hour 19 minutes. See the [post-mortem](../postmortems/2026-10-eks-restore-drill.md). Its script fixes haven't been run on a cluster yet.
 
-Restores two applications from the S3 backup into a temporary EKS cluster, times it, proves the data is correct, and destroys the cluster. It closes the "Volume restore is unproven" limitation in the README.
+Restores Forgejo from the S3 backup into a temporary EKS cluster, times it, proves the data is correct, and destroys the cluster. It closes the "Volume restore is unproven" limitation in the README.
 
 ## Scope
 
 | App | Restore path | What it proves |
 |---|---|---|
 | Forgejo | restic to Longhorn backupstore to Longhorn volumes | Volume restore, and Postgres recovering from a crash-consistent copy of its data files |
-| Kaneo | restic to `pg_dump` file to a fresh Postgres | The logical dump path, running an app against it |
+
+The first drill also restored Kaneo from its `pg_dump` file, which proved the logical dump path. Kaneo was removed on 2026-11-03, so that path is no longer drilled. n8n's standalone Postgres dump is the candidate to replace it.
 
 This is not a full stack restore. Bootstrapping all of `manifests/` is unsafe, because a second copy of the stack acts on the outside world:
 
@@ -17,7 +18,7 @@ This is not a full stack restore. Bootstrapping all of `manifests/` is unsafe, b
 |---|---|
 | Forgejo push mirrors | Force-push stale state over GitHub |
 | cloudflared | Join the live tunnel and take production traffic |
-| n8n, Postiz, Stalwart | Run client workflows, publish posts, handle mail |
+| n8n | Run client workflows |
 | Renovate, image automation | Open PRs and commit to the live repo |
 | Forgejo runner | Pick up CI jobs |
 
@@ -27,7 +28,7 @@ Flux is installed with `flux install`, not `flux bootstrap`, because bootstrap c
 
 ## Secrets
 
-- The age key never goes on the cluster. It decrypts every Secret in this repo, and the drill needs only three: `forgejo-secrets`, `kaneo-secrets`, `kaneo-db-secrets`. Each is decrypted locally and piped to `kubectl apply`, and Flux gets no decryption provider.
+- The age key never goes on the cluster. It decrypts every Secret in this repo, and the drill needs only `forgejo-secrets`. It is decrypted locally and piped to `kubectl apply`, and Flux gets no decryption provider.
 - Restore reads S3 through a drill-only IAM role with `s3:GetObject` and `s3:ListBucket`, attached by EKS Pod Identity. It can't write, so restic runs with `--no-lock`. The production key stays in production.
 - `RESTIC_PASSWORD` goes in as a temporary Secret and is destroyed with the cluster.
 
@@ -99,21 +100,15 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh volumes
    ```
 
-   If the Job has already restored the data, resume with `SKIP_RESTIC_WAIT=1 scripts/restore-drill.sh volumes`.
+   If the Job has already restored the data, resume with `SKIP_RESTIC_WAIT=1 scripts/restore-drill.sh volumes`. Stop the clock when Forgejo is available.
 
-6. **Load Kaneo.** Loads the dump, then starts the app. Stop the clock when this finishes:
-
-   ```bash
-   scripts/restore-drill.sh kaneo
-   ```
-
-7. **Verify** against step 1. Refs and row counts can differ only for changes made after the snapshot, and the data's age is the recovery point. Also clone a public repo that has refs through `kubectl port-forward`, because 35 repos are empty, and check `/api/health` on Kaneo:
+6. **Verify** against step 1. Refs and row counts can differ only for changes made after the snapshot, and the data's age is the recovery point. Also clone a public repo that has refs through `kubectl port-forward`, because 35 repos are empty:
 
    ```bash
    scripts/restore-drill.sh verify
    ```
 
-8. **Destroy and confirm.** Keep `drill-output/` for the write-up. The check must print nothing billable:
+7. **Destroy and confirm.** Keep `drill-output/` for the write-up. The check must print nothing billable:
 
    ```bash
    terraform -chdir=terraform/restore-drill destroy -var="home_ip_cidr=$(curl -s https://checkip.amazonaws.com)/32"
@@ -125,7 +120,7 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
 
    Then remove the `restore-drill` context, cluster and user from your kubeconfig.
 
-9. **Write it up** in `docs/postmortems/`, including everything that went wrong. Update the README, and add the measured time to the resumes.
+8. **Write it up** in `docs/postmortems/`, including everything that went wrong. Update the README, and add the measured time to the resumes.
 
 ## What the first drill settled
 
@@ -137,7 +132,7 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
 
 ## Pass criteria
 
-- Both apps run on EKS from S3 data alone.
+- Forgejo runs on EKS from S3 data alone.
 - Every Forgejo repo passes `git fsck`, and `HEAD` matches the snapshot's data.
 - Measured recovery time and recovery point are recorded.
 - Nothing billable remains, and GitHub, the tunnel and production see no change.
