@@ -72,6 +72,7 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 
 - **[alert-router](https://git.rubiconetic.com/michael/alert-router):** a small Python service, in its own repo, that decides whether a warning pages me, goes in a digest, or is suppressed. I benchmarked model calibration first, because a local model reported 0.95 confidence on every input, including the ones it got wrong. It fails open on every error path, critical alerts and the dead-man's switch bypass it entirely, and it ships as a signed image. Moving it out of a ConfigMap and writing real tests found five ways it could still lose an alert. ([Deployment](manifests/infrastructure/alert-router.yaml))
 - **[Reliability alerts](manifests/infrastructure/reliability-alerts.yaml):** each rule exists because of a failure that went unnoticed, and the comments record the numbers.
+- **[Network policies](manifests/infrastructure/network-policies.yaml):** ingress is default-deny, and each database accepts connections only from its own app and the nightly dump. The rules came from measurements, not documentation: a LoadBalancer connection reaches the pod with the real client IP or a flannel address depending on which node took it, so the obvious "allow kube-system" rule matches nothing. [`scripts/netpol-check.sh`](scripts/netpol-check.sh) checks 46 allowed and blocked paths.
 - **[Flux alerts](manifests/infrastructure/flux-alerts.yaml):** added after a failed build silently froze every deployment for about 35 minutes.
 
 ## Post-mortems
@@ -101,7 +102,7 @@ On 2026-10-31, a [timed drill](docs/runbooks/eks-restore-drill.md) restored Forg
 - **Restores can lose up to a day.** Volume backups run daily, and the drill restored only Forgejo and Kaneo, not the whole stack.
 - **Single control plane.** Losing thinkcentre01 stops scheduling and API access until it returns.
 - **Two nodes can't absorb much.** Total requests exceed one node's capacity, so a long node outage means degraded service.
-- **No NetworkPolicies yet,** and most workloads share the `default` namespace.
+- **Egress is open.** [Network policies](manifests/infrastructure/network-policies.yaml) restrict which pods can connect to which, but any pod can still connect out. Most workloads share the `default` namespace.
 - **Nodes aren't provisioned from code.** The cluster's contents are declarative, but the OS and K3s install are not.
 
 ## Repository layout
@@ -120,7 +121,7 @@ docs/
   postmortems/         What failed, why, and what changed
   runbooks/            Step-by-step operational procedures
   archive/             Finished plans and research
-scripts/               Git hooks and the restore-drill script
+scripts/               Git hooks, the restore-drill script, and the network-policy check
 terraform/             AWS state bucket and off-site backup infrastructure
 ```
 
@@ -129,7 +130,8 @@ terraform/             AWS state bucket and off-site backup infrastructure
 - [x] Off-site backups, with Terraform-managed storage
 - [x] Timed restore drill into a temporary cloud cluster
 - [x] [Alert-router](https://git.rubiconetic.com/michael/alert-router) as its own repo with tests, signed images, and metrics
-- [ ] NetworkPolicies and per-application namespaces
+- [x] [Default-deny ingress](manifests/infrastructure/network-policies.yaml), with each database reachable only from its own app and backups
+- [ ] Egress policies and per-application namespaces
 
 ---
 
