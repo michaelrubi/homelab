@@ -99,7 +99,7 @@ On 2026-10-31, a [timed drill](docs/runbooks/eks-restore-drill.md) restored Forg
 
 ## Known limitations
 
-- **Restores can lose up to a day.** Volume backups run daily, and the drill restored only Forgejo and Kaneo, not the whole stack.
+- **Restores can lose up to a day.** Volume backups run daily, and the drill restores only Forgejo, not the whole stack.
 - **Single control plane.** Losing thinkcentre01 stops scheduling and API access until it returns.
 - **Two nodes can't absorb much.** Total requests exceed one node's capacity, so a long node outage means degraded service.
 - **Egress is open.** [Network policies](manifests/infrastructure/network-policies.yaml) restrict which pods can connect to which, but any pod can still connect out. Most workloads share the `default` namespace.
@@ -111,12 +111,10 @@ On 2026-10-31, a [timed drill](docs/runbooks/eks-restore-drill.md) restored Forg
 clusters/my-cluster/   Flux bootstrap, sync config, image automation
 manifests/
   automation/          n8n and its Postgres
-  communication/       Stalwart mail
   infrastructure/      Monitoring, alerting, Longhorn, backups, Vaultwarden, Renovate
   media/               Torrenter, Jackett
-  productivity/        Forgejo and runner, Kaneo, Obsidian sync
+  productivity/        Forgejo and runner, Obsidian sync
   secrets/             SOPS-encrypted Secrets
-  social/              Postiz and its dependencies
 docs/
   postmortems/         What failed, why, and what changed
   runbooks/            Step-by-step operational procedures

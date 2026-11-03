@@ -66,9 +66,6 @@ spec:
           # Equality matchers also carry the cronjob label into the alert.
           expr: |
             absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-standalone"})
-            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-kaneo"})
-            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-postiz"})
-            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-temporal"})
           # 26h, not 2h: the new jobs run once a day, so on the day they are
           # added there is no completion to record for up to 24h.
           for: 26h
@@ -160,3 +157,39 @@ spec:
               requests no longer reflect reality here. Compare requests
               against actual usage before it starts thrashing:
               kubectl top pods -A --sort-by=memory
+
+    - name: livesync.rules
+      rules:
+        - alert: LiveSyncDeviceStale
+          # livesync-staleness (obsidian-sync.yaml) runs hourly and succeeds
+          # only when every listed device has connected within 48h. Three
+          # missed successes is a stale device, not a blip. The device side
+          # had been dead for six weeks when this was added, found by
+          # opening Obsidian on the phone rather than by any alert.
+          expr: (time() - kube_cronjob_status_last_successful_time{cronjob="livesync-staleness"}) > 3 * 3600
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "An Obsidian LiveSync device has stopped syncing"
+            description: >-
+              livesync-staleness last passed {{ $value | humanizeDuration }}
+              ago, so at least one device has not connected to CouchDB in 48h.
+              Run it by hand to see which one:
+              kubectl -n default create job --from=cronjob/livesync-staleness ls-check && kubectl -n default logs -f job/ls-check
+              Recover with "Fetch from remote" on that device, never
+              "Rebuild everything".
+
+        - alert: LiveSyncCheckNeverSucceeded
+          # Same gap as BackupCronJobNeverSucceeded: the rule above cannot
+          # fire on a series that does not exist.
+          expr: absent(kube_cronjob_status_last_successful_time{cronjob="livesync-staleness"})
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "livesync-staleness has no successful run on record"
+            description: >-
+              The LiveSync staleness check has never passed. Either a device
+              in its list has never connected, the list holds a stale node ID,
+              or the job cannot reach CouchDB (check allow-couchdb-clients).

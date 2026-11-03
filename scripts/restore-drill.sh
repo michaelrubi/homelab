@@ -4,7 +4,6 @@
 #   baseline       record live repo refs and row counts (reads production)
 #   secrets        send the drill's Secrets to the drill cluster
 #   volumes        restore the Forgejo volumes from the backupstore
-#   kaneo          load the Kaneo dump, then start Kaneo
 #   verify         compare the restored apps with the baseline
 #   teardown-check list anything still billable after terraform destroy
 #
@@ -70,7 +69,6 @@ baseline() {
   mkdir -p "$OUT"
   repo_refs "$PROD" >"$OUT/refs.baseline"
   row_counts "$PROD" deploy/forgejo postgres forgejo >"$OUT/forgejo-rows.baseline"
-  row_counts "$PROD" deploy/kaneo-postgres postgres kaneo >"$OUT/kaneo-rows.baseline"
   log "baseline: $(wc -l <"$OUT/refs.baseline") repos recorded in $OUT"
 }
 
@@ -82,7 +80,7 @@ secrets() {
   local plain
   plain=$(sops -d manifests/secrets/secrets.sops.yaml)
 
-  for name in forgejo-secrets kaneo-secrets kaneo-db-secrets; do
+  for name in forgejo-secrets; do
     NAME=$name yq 'select(.metadata.name == env(NAME))' <<<"$plain" | k apply -f - >/dev/null
     log "secrets: applied $name"
   done
@@ -179,26 +177,6 @@ volumes() {
   log "volumes: Forgejo is available"
 }
 
-kaneo() {
-  require_drill
-  local store dump
-  k wait --for=condition=available --timeout=10m deploy/kaneo-postgres
-  store=$(k get pod -l app=drill-backupstore -o name | head -1)
-  dump=$(k exec "$store" -- sh -c 'ls -1t /opt/backupstore/postgres-dumps/postgres-kaneo-*.sql.gz | head -1')
-  log "kaneo: loading $dump"
-
-  # pg_dumpall recreates the role and database, which already exist here, so
-  # those two errors are expected. verify is what decides if this worked.
-  mkdir -p "$OUT"
-  k exec "$store" -- cat "$dump" | gunzip |
-    k exec -i deploy/kaneo-postgres -- psql -U kaneo -d postgres >/dev/null 2>"$OUT/kaneo-load.log" || true
-  log "kaneo: load finished with $(grep -c ERROR "$OUT/kaneo-load.log" || true) errors, see $OUT/kaneo-load.log"
-
-  flux --context "$DRILL" resume kustomization drill-kaneo
-  k wait --for=condition=available --timeout=10m deploy/kaneo
-  log "kaneo: available"
-}
-
 verify() {
   require_drill
   local failed
@@ -216,11 +194,8 @@ verify() {
   log "verify: git fsck failures: ${failed:-none}"
 
   row_counts "$DRILL" deploy/forgejo postgres forgejo >"$OUT/forgejo-rows.restored"
-  row_counts "$DRILL" deploy/kaneo-postgres postgres kaneo >"$OUT/kaneo-rows.restored"
   log "verify: Forgejo row differences:"
   diff "$OUT/forgejo-rows.baseline" "$OUT/forgejo-rows.restored" || true
-  log "verify: Kaneo row differences:"
-  diff "$OUT/kaneo-rows.baseline" "$OUT/kaneo-rows.restored" || true
 
   log "verify: mirrors must be off: $(k exec deploy/forgejo -c forgejo -- printenv FORGEJO__mirror__ENABLED)"
 }
@@ -246,7 +221,6 @@ case "${1:-}" in
   baseline) baseline ;;
   secrets) secrets ;;
   volumes) volumes ;;
-  kaneo) kaneo ;;
   verify) verify ;;
   teardown-check) teardown_check ;;
   *)
