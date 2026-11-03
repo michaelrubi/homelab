@@ -27,6 +27,9 @@ spec:
     spec:
       ttlSecondsAfterFinished: 86400
       template:
+        metadata:
+          labels:
+            app: renovate
         spec:
           # Prefer node02, which has ~3GiB available to node01's ~1.5GiB.
           # Soft, so Renovate still runs if node02 is down.
