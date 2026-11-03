@@ -41,7 +41,6 @@ resources:
 - automation/n8n-pg.yaml
 - automation/n8n-service.yaml
 - automation/n8n.yaml
-- communication/stalwart.yaml
 - infrastructure/alert-router.yaml
 - infrastructure/alert-router-alerts.yaml
 - infrastructure/cloudflared.yaml
@@ -67,16 +66,9 @@ resources:
 - media/jackett.yaml
 - media/torrenter.yaml
 - productivity/forgejo.yaml
-- productivity/kaneo-postgres.yaml
-- productivity/kaneo.yaml
 - secrets/secrets.sops.yaml
 - secrets/alertmanager-webhooks.sops.yaml
 - productivity/obsidian-sync.yaml
-- social/postiz-app.yaml
-- social/postiz-instagram-provider-js-configmap.yaml
-- social/postiz-postgres.yaml
-- social/postiz-redis.yaml
-- social/postiz-temporal.yaml
 
 # ---------------------------------------------------------------------------
 # Placement: which workloads prefer thinkcentre02
@@ -96,21 +88,23 @@ resources:
 #
 # Grouping is by application, not just by size, so each app sits with its own
 # database and the split does not add cross-node hops:
-#   node02  postiz + its whole stack (postgres, redis, temporal, temporal-
-#           postgres, elasticsearch), kaneo + kaneo-postgres, couchdb,
-#           homepage, torrenter  ... plus grafana and alertmanager, which are
-#           set in monitoring.yaml because they come from the Helm chart.
+#   node02  n8n + its postgres, couchdb, homepage, torrenter  ... plus
+#           grafana and alertmanager, which are set in monitoring.yaml
+#           because they come from the Helm chart.
 #   node01  prometheus (20Gi volume, must recover fastest after an incident),
 #           forgejo + runner (nodeSelector-pinned, Flux's own git source),
-#           n8n + its postgres, stalwart, jackett, vaultwarden, flux itself.
-# Projected: roughly 61% / 62%.
+#           jackett, vaultwarden, flux itself.
+#
+# 2026-11-03: Postiz, Kaneo and Stalwart were removed. Postiz was node02's
+# dominant workload, so n8n and its postgres (~900Mi together) moved from
+# node01 to node02 to take its place. Projected: roughly 64% / 40%.
 #
 # preferred, not required: if node02 is down these still schedule on node01
 # rather than going Pending.
 patches:
   - target:
       kind: Deployment
-      name: ^(postiz|postiz-postgres|postiz-redis|postiz-temporal|postiz-temporal-postgres|postiz-temporal-elasticsearch|kaneo|kaneo-postgres|couchdb|homepage|torrenter)$
+      name: ^(n8n-deployment|postgres|couchdb|homepage|torrenter)$
     patch: |-
       - op: add
         path: /spec/template/spec/affinity
@@ -126,7 +120,7 @@ patches:
                         - thinkcentre02
   - target:
       kind: Deployment
-      name: ^(stalwart|jackett-deployment|vaultwarden|postgres|n8n-deployment)$
+      name: ^(jackett-deployment|vaultwarden)$
     patch: |-
       - op: add
         path: /spec/template/spec/affinity

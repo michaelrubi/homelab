@@ -70,21 +70,6 @@ spec:
                 secretKeyRef:
                   name: homeassistant-secrets
                   key: HA_TOKEN
-            - name: HOMEPAGE_VAR_POSTIZ_URL
-              valueFrom:
-                secretKeyRef:
-                  name: postiz-secrets
-                  key: MAIN_URL
-            - name: HOMEPAGE_VAR_KANEO_URL
-              valueFrom:
-                secretKeyRef:
-                  name: kaneo-secrets
-                  key: KANEO_CLIENT_URL
-            - name: HOMEPAGE_VAR_STALWART_URL
-              valueFrom:
-                secretKeyRef:
-                  name: stalwart-secrets
-                  key: PUBLIC_URL
           volumeMounts:
             - name: config
               mountPath: /app/config

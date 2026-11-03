@@ -81,7 +81,6 @@ spec:
               "@gotohuman/n8n-nodes-gotohuman": "0.3.0",
               "n8n-nodes-instantly": "0.1.7547",
               "n8n-nodes-tesseractjs": "1.5.1",
-              "n8n-nodes-postiz": "0.2.17",
               "n8n-nodes-anydoc": "0.1.0"
             }
           }

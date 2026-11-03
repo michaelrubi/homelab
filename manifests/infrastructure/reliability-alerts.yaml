@@ -66,9 +66,6 @@ spec:
           # Equality matchers also carry the cronjob label into the alert.
           expr: |
             absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-standalone"})
-            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-kaneo"})
-            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-postiz"})
-            or absent(kube_cronjob_status_last_successful_time{cronjob="postgres-dump-temporal"})
           # 26h, not 2h: the new jobs run once a day, so on the day they are
           # added there is no completion to record for up to 24h.
           for: 26h
