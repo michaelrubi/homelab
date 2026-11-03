@@ -40,83 +40,18 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
 
-      # --- Durable custom-node installer ---
-      # Installs community nodes onto the PVC so they survive pod restarts.
-      # --ignore-scripts/--no-optional skip native builds (e.g. isolated-vm)
-      # that fail in this minimal image.
+      # --- Community nodes ---
+      # Installed and updated from the n8n UI (Settings > Community nodes).
+      # n8n records each package and its exact version in Postgres and keeps
+      # the files on the PVC under ~/.n8n/nodes. N8N_REINSTALL_MISSING_PACKAGES
+      # reinstalls anything recorded but missing on disk at startup, at the
+      # recorded version, so an n8n upgrade or a lost PVC heals itself.
       #
-      # 2026-09-18: every version is exact. Six were "*" and five were carets,
-      # so each restart resolved whatever npm served at that moment and pulled
-      # it straight into a production automation engine -- a supply-chain path
-      # where any future release, compromised or merely broken, lands without
-      # review. Versions below are the ones that were actually installed when
-      # they were pinned. Bump them deliberately.
-      #
-      # The install is also skipped when the PVC already holds exactly this
-      # package set, so a restart no longer waits on the network. Editing the
-      # dependency list changes the stamp and forces a reinstall.
-      initContainers:
-      - name: init-n8n-nodes
-        image: node:20-alpine
-        command:
-        - sh
-        - -c
-        - |
-          set -eu
-          mkdir -p /home/node/.n8n/nodes
-          cd /home/node/.n8n/nodes
-          cat > package.json <<'PKGJSON'
-          {
-            "name": "n8n-custom-nodes",
-            "version": "1.0.0",
-            "private": true,
-            "dependencies": {
-              "n8n-nodes-minimax-chat": "0.1.10",
-              "@kenkaiii/n8n-nodes-supercode": "1.6.2",
-              "n8n-nodes-forgejo": "0.2.0",
-              "@mendable/n8n-nodes-firecrawl": "2.2.0",
-              "n8n-nodes-webcrawlerapi": "0.3.7",
-              "n8n-nodes-scoro": "^1.1.0",
-              "n8n-nodes-run-node-with-credentials-x": "0.4.1",
-              "@gotohuman/n8n-nodes-gotohuman": "0.3.0",
-              "n8n-nodes-instantly": "0.1.7547",
-              "n8n-nodes-tesseractjs": "1.5.1",
-              "n8n-nodes-anydoc": "0.1.0"
-            }
-          }
-          PKGJSON
-          # Skip the reinstall when the PVC already matches this package set.
-          STAMP=/home/node/.n8n/nodes/.pkg-stamp
-          WANT=$(sha256sum package.json | cut -d' ' -f1)
-          if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$WANT" ] && [ -d node_modules ]; then
-            echo "Custom nodes already installed for this package set; skipping npm install."
-          else
-            echo 'Installing custom nodes...'
-            npm install --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund || { echo 'npm install FAILED'; exit 1; }
-            printf '%s' "$WANT" > "$STAMP"
-            INSTALLED=1
-          fi
-          echo 'Verifying packages...'
-          for pkg in n8n-nodes-minimax-chat @kenkaiii/n8n-nodes-supercode n8n-nodes-forgejo @mendable/n8n-nodes-firecrawl n8n-nodes-webcrawlerapi n8n-nodes-scoro n8n-nodes-anydoc; do
-            if [ ! -d "node_modules/$pkg" ]; then
-              echo "ERROR: $pkg not found after install!"
-              exit 1
-            fi
-            echo "  OK: $pkg"
-          done
-          echo 'All custom nodes installed successfully.'
-          # npm runs as root, so a fresh install leaves root-owned files that
-          # need handing back to uid 1000. Otherwise skip the chown -R: walking
-          # every node_modules file on each restart was pure overhead.
-          if [ "${INSTALLED:-0}" = 1 ] || [ "$(stat -c '%u:%g' /home/node/.n8n)" != "1000:1000" ]; then
-            chown -R 1000:1000 /home/node/.n8n || true
-          fi
-        volumeMounts:
-        - name: n8n-data
-          mountPath: /home/node/.n8n
-        securityContext:
-          runAsUser: 0
-          runAsGroup: 0
+      # This replaces an init container that rewrote ~/.n8n/nodes/package.json
+      # from a list in this file. Its npm install pruned every UI-installed
+      # package while n8n's database still listed them, which showed up as
+      # load errors on the Community nodes page. Don't reintroduce it: there
+      # must be one owner of that directory, and it is n8n.
 
       containers:
       - name: n8n
@@ -152,6 +87,8 @@ spec:
           value: "America/Phoenix"
         - name: N8N_SECURE_COOKIE
           value: "false"
+        - name: N8N_REINSTALL_MISSING_PACKAGES
+          value: "true"
         - name: N8N_ENCRYPTION_KEY
           valueFrom:
             secretKeyRef:
