@@ -8,7 +8,7 @@
 #
 #   scripts/netpol-check.sh
 #
-# The probe pods carry real app labels (app=n8n, app=postiz...), which the
+# The probe pods carry real app labels (app=n8n, app=pgweb...), which the
 # app's own Service also selects. Their readiness probe always fails, so they
 # never become endpoints and no real traffic is sent to them.
 set -euo pipefail
@@ -18,16 +18,13 @@ fail=0
 
 # client-label  target:port ...  (+ means allowed, - means blocked)
 MATRIX=(
-  "netpol-probe     -postgres:5432 -kaneo-postgres:5432 -postiz-postgres:5432 -postiz-temporal-postgres:5432 -postiz-redis:6379 -postiz-temporal:7233 -postiz-temporal-elasticsearch:9200 -forgejo-service:3000 -n8n-service:5678 -vaultwarden-service:8080 -stalwart-http:8080 +stalwart-mail:25 +stalwart-mail:465 -stalwart-mail:993"
-  "n8n              +postgres:5432 +forgejo-service:3000 +kaneo-service:5173 +postiz-service:5000 +stalwart-http:8080 -vaultwarden-service:8080 -obsidian-sync-service:5984 -kaneo-postgres:5432"
-  "postgres-backup  +postgres:5432 +kaneo-postgres:5432 +postiz-postgres:5432 +postiz-temporal-postgres:5432 -forgejo-service:3000"
+  "netpol-probe     -postgres:5432 -forgejo-service:3000 -n8n-service:5678 -vaultwarden-service:8080"
+  "n8n              +postgres:5432 +forgejo-service:3000 -vaultwarden-service:8080 -obsidian-sync-service:5984"
+  "postgres-backup  +postgres:5432 -forgejo-service:3000"
   "renovate         +forgejo-service:3000 -postgres:5432"
   "forgejo-runner   +forgejo-service:3000 -n8n-service:5678"
   "forgejo          +n8n-service:5678 -postgres:5432"
-  "pgweb            +postgres:5432 -postiz-postgres:5432"
-  "postiz           +postiz-postgres:5432 +postiz-redis:6379 +postiz-temporal:7233 -kaneo-postgres:5432"
-  "postiz-temporal  +postiz-temporal-postgres:5432 +postiz-temporal-elasticsearch:9200 +postiz-temporal:7233"
-  "kaneo            +kaneo-postgres:5432 -postiz-postgres:5432"
+  "pgweb            +postgres:5432 -forgejo-service:3000"
   "torrenter        +jackett-service:9117 -postgres:5432"
 )
 
