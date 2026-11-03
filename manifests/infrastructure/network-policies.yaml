@@ -1,9 +1,8 @@
 # Network policies for the default namespace (2026-11-03)
 #
 # Until now any pod could open a connection to any other pod. A compromised
-# torrenter or a bad n8n workflow could reach every database directly:
-# Postiz's, Kaneo's, Temporal's, and the standalone postgres n8n keeps its
-# data in. These policies make ingress default-deny and then list who may
+# torrenter or a bad n8n workflow could reach the standalone postgres n8n
+# keeps its data in. These policies make ingress default-deny and then list who may
 # talk to whom. Egress stays open; that's the next step, and a harder one,
 # because n8n calls out to dozens of external APIs.
 #
@@ -75,12 +74,8 @@ spec:
           - forgejo
           - homepage
           - jackett
-          - kaneo
           - n8n
           - pgweb
-          - postiz
-          - postiz-temporal-ui
-          - stalwart
           - torrenter
           - vaultwarden
   policyTypes:
@@ -135,30 +130,6 @@ spec:
             matchLabels:
               app: n8n
 ---
-# n8n is the automation hub: workflows tagged forgejo, postgres and others
-# call these apps' APIs directly. Vaultwarden and CouchDB are not on the list.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-n8n-to-apps
-  namespace: default
-spec:
-  podSelector:
-    matchExpressions:
-      - key: app
-        operator: In
-        values:
-          - kaneo
-          - postiz
-          - stalwart
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: n8n
----
 # Forgejo webhooks (push, PR, issue) into n8n workflows.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -176,29 +147,6 @@ spec:
         - podSelector:
             matchLabels:
               app: forgejo
----
-# Mail submission and delivery are public anyway (stalwart-mail is a
-# LoadBalancer), so any pod may hand Stalwart a message. The admin UI and IMAP
-# are not included. 587 is listed for when submission is enabled; Stalwart
-# doesn't listen on it today.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-smtp-from-pods
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: stalwart
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector: {}
-      ports:
-        - port: 25
-        - port: 465
-        - port: 587
 ---
 # torrenter searches through Jackett (FlareSolverr is a sidecar in the same
 # pod, so it needs no rule).
@@ -245,138 +193,3 @@ spec:
               app: postgres-backup
       ports:
         - port: 5432
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-kaneo-postgres-clients
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: kaneo-postgres
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: kaneo
-        - podSelector:
-            matchLabels:
-              app: postgres-backup
-      ports:
-        - port: 5432
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-postiz-postgres-clients
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: postiz-postgres
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: postiz
-        - podSelector:
-            matchLabels:
-              app: postgres-backup
-      ports:
-        - port: 5432
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-postiz-redis-clients
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: postiz-redis
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: postiz
-      ports:
-        - port: 6379
----
-# Temporal's own services dial each other through the Service name, so the
-# server pod has to be allowed to reach itself.
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-postiz-temporal-clients
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: postiz-temporal
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-                  - postiz
-                  - postiz-temporal
-                  - postiz-temporal-ui
-                  - postiz-temporal-admin-tools
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-temporal-postgres-clients
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: postiz-temporal-postgres
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-                  - postiz-temporal
-                  - postiz-temporal-admin-tools
-                  - postgres-backup
-      ports:
-        - port: 5432
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-temporal-elasticsearch-clients
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: postiz-temporal-elasticsearch
-  policyTypes:
-    - Ingress
-  ingress:
-    - from:
-        - podSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-                  - postiz-temporal
-                  - postiz-temporal-admin-tools
-      ports:
-        - port: 9200
