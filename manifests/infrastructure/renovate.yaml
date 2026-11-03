@@ -27,7 +27,22 @@ spec:
     spec:
       ttlSecondsAfterFinished: 86400
       template:
+        metadata:
+          labels:
+            app: renovate
         spec:
+          # Prefer node02, which has ~3GiB available to node01's ~1.5GiB.
+          # Soft, so Renovate still runs if node02 is down.
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: In
+                        values:
+                          - thinkcentre02
           containers:
             - name: renovate
               image: renovate/renovate:42.99.0
@@ -73,7 +88,11 @@ spec:
 
               resources:
                 requests:
-                  memory: "512Mi"
+                  # Measured peak is ~930Mi. At 512Mi the scheduler kept
+                  # placing it on thinkcentre01, where it starts alongside
+                  # restic at 05:00 and pushed the node into swap every
+                  # morning (NodeSwapThrashing at ~05:16).
+                  memory: "1Gi"
                   cpu: "200m"
                 limits:
                   memory: "4Gi"
