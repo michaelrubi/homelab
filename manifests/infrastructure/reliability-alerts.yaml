@@ -26,7 +26,12 @@ spec:
           # On 2026-09-11 this job had not succeeded in 5 days: every run
           # died on "access denied by server" mounting the NFS export from
           # thinkcentre02, 3908 failed mount attempts, zero notifications.
-          expr: (time() - kube_cronjob_status_last_successful_time{cronjob=~".*(backup|dump).*"}) > 36 * 3600
+          #
+          # offsite-backup-check is excluded: it runs weekly, so 36h after
+          # every Sunday run it fired and re-paged hourly until the next one.
+          # 2026-11-02 to 11-03 sent ~17 critical pages for a check that had
+          # passed. It has its own rule below.
+          expr: (time() - kube_cronjob_status_last_successful_time{cronjob=~".*(backup|dump).*", cronjob!="offsite-backup-check"}) > 36 * 3600
           for: 10m
           labels:
             severity: critical
@@ -37,6 +42,21 @@ spec:
               {{ $value | humanizeDuration }} ago. Check for a Pending pod
               stuck on a volume mount:
               kubectl get pods -n {{ $labels.namespace }} | grep {{ $labels.cronjob }}
+
+        - alert: BackupCheckStale
+          # The weekly restic integrity check (Sundays 07:00). 8 days is one
+          # missed run plus a day of margin.
+          expr: (time() - kube_cronjob_status_last_successful_time{cronjob="offsite-backup-check"}) > 8 * 86400
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backup check {{ $labels.cronjob }} has not succeeded in over 8 days"
+            description: >-
+              {{ $labels.namespace }}/{{ $labels.cronjob }} last completed
+              {{ $value | humanizeDuration }} ago. The off-site restic repo
+              has gone unverified for over a week:
+              kubectl get jobs -n {{ $labels.namespace }} | grep {{ $labels.cronjob }}
 
         - alert: BackupCronJobNeverSucceeded
           # The staleness rule above cannot fire if the series is absent,
