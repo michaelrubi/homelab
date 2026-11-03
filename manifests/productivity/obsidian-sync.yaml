@@ -181,3 +181,118 @@ spec:
     - port: 5984
       targetPort: 5984
       protocol: TCP
+---
+# LiveSync device staleness check (2026-11-03)
+#
+# The server can be perfectly healthy while every device but one has quietly
+# stopped syncing. Found 2026-11-03: the phone (plugin 0.25.36) had not
+# checked in since 2026-09-18 and the Mac Mini not since the 2026-09-02
+# rebuild, while the laptop on 1.0.x kept writing happily. LiveSync 1.0
+# refuses or pauses clients on an older feature set, and nothing on the
+# server side logs that -- the old clients simply stop showing up.
+#
+# Each device stamps node_info[<id>].last_connected in the milestone doc when
+# it connects. This job fails if any device in LIVESYNC_NODES is missing or
+# older than MAX_AGE_HOURS. LiveSyncDeviceStale in reliability-alerts.yaml
+# fires off the job's last successful run, so it clears by itself once the
+# device is back, rather than KubeJobFailed, which latches until the failed
+# Job object is deleted. To see which device is stale:
+#   kubectl -n default create job --from=cronjob/livesync-staleness ls-check
+#   kubectl -n default logs job/ls-check
+#
+# Node IDs are per device and get re-minted when a device's local database is
+# rebuilt. After a "Reset Synchronisation on This Device" (the old "Fetch from
+# remote") check the milestone doc and update the list here.
+#
+# Unverified: last_connected is stamped when a device connects, and it is not
+# yet known whether a device that stays open in LiveSync mode for days
+# re-stamps it. If the always-on Mac Mini trips this while plainly syncing,
+# that is why, and the threshold needs raising rather than the device fixing.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: livesync-staleness
+  namespace: default
+  labels:
+    app: livesync-check
+spec:
+  schedule: "17 * * * *"
+  timeZone: "America/Phoenix"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  # 0 so a failed run never latches KubeJobFailed; the staleness alert is the
+  # signal, and a manual run (above) shows the details.
+  failedJobsHistoryLimit: 0
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: livesync-check
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+          containers:
+          - name: check
+            image: python:3.13-alpine
+            env:
+            # laptop, phone, Mac Mini, as of the 2026-11-03 rebuild
+            - name: LIVESYNC_NODES
+              value: "qcfuzbcb0d kk7cs1w31v 4l5mjtn07i"
+            - name: MAX_AGE_HOURS
+              value: "48"
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: obsidian-secrets
+                  key: COUCHDB_USER
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: obsidian-secrets
+                  key: COUCHDB_PASSWORD
+            command: ["python3", "-c"]
+            args:
+              - |
+                import base64, json, os, sys, time, urllib.request
+                url = "http://obsidian-sync-service:5984/homelab/_local/obsydian_livesync_milestone"
+                auth = base64.b64encode(f"{os.environ['COUCHDB_USER']}:{os.environ['COUCHDB_PASSWORD']}".encode()).decode()
+                req = urllib.request.Request(url, headers={"Authorization": f"Basic {auth}"})
+                # A new pod is blocked for a second or two until the network
+                # policy controller learns its IP.
+                for attempt in range(15):
+                    try:
+                        doc = json.load(urllib.request.urlopen(req, timeout=10))
+                        break
+                    except OSError as e:
+                        err = e
+                        time.sleep(2)
+                else:
+                    sys.exit(f"cannot read milestone doc: {err}")
+                info = doc.get("node_info", {})
+                limit = float(os.environ["MAX_AGE_HOURS"])
+                stale = 0
+                for node in os.environ["LIVESYNC_NODES"].split():
+                    n = info.get(node)
+                    if not n:
+                        print(f"STALE {node}: no node_info, has never connected since the last rebuild")
+                        stale += 1
+                        continue
+                    age = (time.time() - n["last_connected"] / 1000) / 3600
+                    state = "STALE" if age > limit else "ok"
+                    stale += state == "STALE"
+                    print(f"{state} {node}: {n.get('device_name')} plugin {n.get('plugin_version')}, last connected {age:.1f}h ago")
+                versions = {info[n].get("plugin_version") for n in os.environ["LIVESYNC_NODES"].split() if n in info}
+                if len(versions) > 1:
+                    print(f"note: mixed plugin versions {sorted(versions)}")
+                sys.exit(1 if stale else 0)
+            resources:
+              requests:
+                memory: "32Mi"
+                cpu: "10m"
+              limits:
+                memory: "64Mi"
