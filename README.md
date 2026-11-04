@@ -1,6 +1,6 @@
 # Rubiconetic Homelab
 
-![Kubernetes](https://img.shields.io/badge/kubernetes-k3s_v1.33-326ce5?style=flat-square&logo=kubernetes&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/kubernetes-k3s_v1.34-326ce5?style=flat-square&logo=kubernetes&logoColor=white)
 ![Flux](https://img.shields.io/badge/GitOps-Flux-2f618b?style=flat-square&logo=flux&logoColor=white)
 ![Longhorn](https://img.shields.io/badge/storage-Longhorn-5f224a?style=flat-square)
 ![Prometheus](https://img.shields.io/badge/monitoring-Prometheus-e6522c?style=flat-square&logo=prometheus&logoColor=white)
@@ -15,7 +15,7 @@ The Git source of truth for a two-node, bare-metal Kubernetes cluster. It runs t
 | | |
 | :--- | :--- |
 | **Hardware** | 2 Lenovo ThinkCentre mini PCs, 4 CPU / 8 GB each |
-| **Platform** | K3s v1.33 on Ubuntu 24.04, 1 server and 1 agent |
+| **Platform** | K3s v1.34 on Ubuntu 24.04, 1 server and 1 agent |
 | **Workloads** | About 115 pods, including 5 Postgres instances |
 | **Storage** | 19 Longhorn volumes, 2 replicas each |
 | **Delivery** | Flux reconciles this repo; 90+ pull requests merged, most opened by Renovate |
