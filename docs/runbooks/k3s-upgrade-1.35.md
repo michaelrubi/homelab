@@ -2,7 +2,7 @@
 
 Flux v2.10.0 ([#165](https://git.rubiconetic.com/michael/homelab/pulls/165)) needs Kubernetes 1.35.2 or later, and the cluster runs v1.33.6+k3s1. Flux 2.9 already wants 1.34 or later, so the first step below also brings the running Flux back into its support range.
 
-This plan has not been run yet. Versions and findings are from 2026-11-02, so re-check them before starting.
+Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1, waiting for the Sunday soak. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
 
 | Phase | Change | Soak before the next phase |
 |---|---|---|
@@ -13,6 +13,8 @@ This plan has not been run yet. Versions and findings are from 2026-11-02, so re
 
 - **Downtime:** the Kubernetes API is down for about a minute per node restart. Running pods keep running, though Traefik restarts on its new chart in both k3s phases.
 - **Needs:** `kubectl`, SSH with sudo to both nodes, and `age` on the workstation.
+- **SSH names:** the nodes answer SSH as `cptc1` (thinkcentre01) and `wtc2` (thinkcentre02), their Tailscale names. The commands below use the Kubernetes names, so substitute.
+- **Sudo prompts:** sudo on the nodes asks for a password, which `ssh host 'sudo …'` can't take, and in a tar-over-SSH pipe the prompt would land in the stream. In phase 1, `ssh -t`, a copy of the workstation's `age` in `~/age` on thinkcentre01, and the snapshot written there and copied back with `scp` worked.
 - **Don't merge to `main`** during a k3s phase, apart from the CI change in its last step.
 
 ## Decisions
