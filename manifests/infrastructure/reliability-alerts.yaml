@@ -175,10 +175,13 @@ spec:
             description: >-
               livesync-staleness last passed {{ $value | humanizeDuration }}
               ago, so at least one device has not connected to CouchDB in 48h.
-              Run it by hand to see which one:
-              kubectl -n default create job --from=cronjob/livesync-staleness ls-check && kubectl -n default logs -f job/ls-check
-              Recover with "Fetch from remote" on that device, never
-              "Rebuild everything".
+              If that device was just switched off, turn it on and open
+              Obsidian; the alert clears within the hour. Only if it is on
+              and still not syncing, use "Reset Synchronisation on This
+              Device" (the old "Fetch from remote"), which drops its unsynced
+              edits and re-mints its node ID. Never "Overwrite Server Data".
+              To see which device it is, run:
+              kubectl -n default create job --from=cronjob/livesync-staleness ls-check --dry-run=client -o json | jq 'del(.metadata.ownerReferences)' | kubectl create -f - && kubectl -n default logs -f job/ls-check --pod-running-timeout=1m; kubectl -n default delete job ls-check
 
         - alert: LiveSyncCheckNeverSucceeded
           # Same gap as BackupCronJobNeverSucceeded: the rule above cannot

@@ -197,8 +197,18 @@ spec:
 # fires off the job's last successful run, so it clears by itself once the
 # device is back, rather than KubeJobFailed, which latches until the failed
 # Job object is deleted. To see which device is stale:
-#   kubectl -n default create job --from=cronjob/livesync-staleness ls-check
-#   kubectl -n default logs job/ls-check
+#   kubectl -n default create job --from=cronjob/livesync-staleness ls-check \
+#     --dry-run=client -o json | jq 'del(.metadata.ownerReferences)' \
+#     | kubectl create -f - \
+#     && kubectl -n default logs -f job/ls-check --pod-running-timeout=1m
+#   kubectl -n default delete job ls-check
+# The ownerReferences strip matters: a plain `create job --from` is owned by
+# this CronJob, and failedJobsHistoryLimit: 0 has the controller delete it the
+# moment it fails, before its logs can be read.
+#
+# A device that is simply switched off goes stale too and needs nothing but
+# turning on (2026-11-06: the Mac Mini, off for 63h, tripped this and cleared
+# on power-up). Reset a device only if it is on and still not connecting.
 #
 # Node IDs are per device and get re-minted when a device's local database is
 # rebuilt. After a "Reset Synchronisation on This Device" (the old "Fetch from
