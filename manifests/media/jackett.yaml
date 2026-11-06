@@ -55,7 +55,9 @@ spec:
       containers:
       # --- JACKETT CONTAINER ---
       - name: jackett
-        image: lscr.io/linuxserver/jackett:v0.24.2581-ls27
+        # ghcr.io, not lscr.io: same image, but Renovate can't look up tags
+        # through lscr.io's auth redirect (Dependency Dashboard, issue 187).
+        image: ghcr.io/linuxserver/jackett:v0.24.2581-ls27
         ports:
         - containerPort: 9117
         resources:

@@ -7,9 +7,6 @@
     "assignees": [
         "michael"
     ],
-    "reviewers": [
-        "michael"
-    ],
     "timezone": "America/Phoenix",
     "kubernetes": {
         "description": "Scoped to manifests/. The previous '\\.yaml$' matched every YAML in the repo, including docs/postiz-research/ and the 10k-line generated gotk-components.yaml.",
@@ -42,6 +39,13 @@
                 "mrubi86/torrenter"
             ],
             "enabled": false
+        },
+        {
+            "description": "LinuxServer tags are vX.Y.Z-lsN. Regex versioning ranks the -lsN rebuilds and skips the development-* and per-arch tags.",
+            "matchPackageNames": [
+                "ghcr.io/linuxserver/jackett"
+            ],
+            "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-ls(?<build>\\d+)$"
         }
     ]
 }

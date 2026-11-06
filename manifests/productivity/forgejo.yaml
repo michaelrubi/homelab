@@ -83,7 +83,7 @@ spec:
       # --- ADDED: Fix permissions for Longhorn blank volume ---
       initContainers:
         - name: init-forgejo-data
-          image: busybox:1.36
+          image: busybox:1.38
           command:
             - sh
             - -c
@@ -309,7 +309,7 @@ spec:
           emptyDir: {}
       initContainers:
         - name: volume-permissions
-          image: busybox:1.36
+          image: busybox:1.38
           # Deliberately NOT guarded like init-forgejo-data: the dind
           # container below mounts this same volume as root, so files deep in
           # the tree can be root-owned while /data itself looks correct. The
