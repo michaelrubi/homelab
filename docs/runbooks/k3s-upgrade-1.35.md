@@ -2,11 +2,12 @@
 
 Flux v2.10.0 ([#165](https://git.rubiconetic.com/michael/homelab/pulls/165)) needs Kubernetes 1.35.2 or later, and the cluster runs v1.33.6+k3s1. Flux 2.9 already wants 1.34 or later, so the first step below also brings the running Flux back into its support range.
 
-Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1, waiting for the Sunday soak. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
+Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1, waiting for the Sunday soak. Phase 1b (Longhorn) was added on 2026-11-06, after the Longhorn gate failed. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
 
 | Phase | Change | Soak before the next phase |
 |---|---|---|
 | 1 | k3s → v1.34.12+k3s1 | One Sunday kured reboot |
+| 1b | Longhorn → v1.11.3 | One night of backups |
 | 2 | k3s → v1.35.9+k3s1 | One Sunday kured reboot |
 | 3 | Flux → v2.10.0 (#165) | A few days |
 | 4 | Image controllers → v1.3.0 | None |
@@ -24,7 +25,7 @@ Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1, waiting for the Sund
 - **Go straight to the latest 1.34 patch.** An extra stop at v1.33.13 adds a restart and gains nothing, because it carries the same Traefik chart jump.
 - **Replace the binary, don't rerun the install script.** The script rewrites the systemd unit, and these nodes depend on `--node-ip`, `--advertise-address` and `--flannel-iface tailscale0`. Losing those would break networking over Tailscale.
 - **Don't drain.** Restarting k3s leaves containers running. A drain would push every pod onto one 8 GiB node, and total requests already exceed one node's capacity. Longhorn's `block-if-contains-last-replica` policy could also stall it.
-- **Leave Longhorn out of this.** It stays on v1.10.1 unless the check in step 0 fails. Longhorn v1.11.3 requires Kubernetes 1.34, so it can only follow phase 1, as its own change.
+- **Upgrade Longhorn to v1.11.3 between phases 1 and 2, as its own change.** The step 0 gate failed on 2026-11-06 (see phase 1b). v1.11.3 requires Kubernetes 1.34, so it can only follow phase 1. Stop at 1.11: Longhorn moves one minor at a time, and 1.12 can come later without blocking this plan.
 
 ## Known impact
 
@@ -37,7 +38,7 @@ Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1, waiting for the Sund
 | cgroups | 1.35 removes cgroup v1 by default. Ubuntu 24.04 uses v2 | Confirm in step 0 |
 | Kubelet flag | `--pod-infra-container-image` is gone in 1.35. Neither node's `k3s.io/node-args` sets it | Confirm in step 0 |
 | Metrics | 1.34 relabels some apiserver metrics. No alert in `manifests/` uses them. Bundled dashboards in kube-prometheus-stack 66 may show gaps | Cosmetic |
-| Longhorn | **Unverified:** I couldn't confirm v1.10.1 is tested on 1.35 | Gate in step 0 |
+| Longhorn | No source lists v1.10.x as tested on 1.35, and 1.10 is past end of maintenance. Its CSI sidecars (provisioner v5.3.0) predate 1.34 | Phase 1b, before phase 2 |
 | Prometheus Operator | **Unverified:** v0.79.0 on 1.35, chart 66 is well behind current | Watch in the verify step |
 
 ## 0. Before each k3s phase
@@ -56,7 +57,7 @@ sudo ls /var/lib/rancher/k3s/server/db/ 2>/dev/null
 
 The last command runs on thinkcentre01 and should show `state.db`. Neither node carries an etcd role, so the cluster should be on SQLite. If it shows `etcd/`, stop: the snapshot below doesn't apply.
 
-**Longhorn gate, before phase 2:** check the [Longhorn compatibility matrix](https://www.suse.com/suse-longhorn/support-matrix/all-supported-versions/) for v1.10.x on Kubernetes 1.35. If it isn't listed, upgrade Longhorn first, as its own change.
+**Longhorn gate, before phase 2:** production must be on Longhorn v1.11.3 (phase 1b). Checked 2026-11-06: the [SUSE matrix](https://www.suse.com/suse-longhorn/support-matrix/all-supported-versions/) names no Kubernetes versions at all, so 1.10.x on 1.35 isn't listed, and the gate fails.
 
 **Confirm the cluster is healthy:**
 
@@ -168,6 +169,38 @@ age -d -i <key-file> ~/k3s-server-<stamp>.tar.gz.age \
 
 Traefik's bundled chart follows the k3s version, so it rolls back with the binary. If a problem shows up after a soak, prefer fixing forward, because restoring an old snapshot would roll back cluster state from before the soak.
 
+## Phase 1b: Longhorn v1.11.3
+
+Run this after phase 1's Sunday soak and before phase 2, on a weekday evening outside the backup window.
+
+**Why, as of 2026-11-06:**
+- No source lists Longhorn v1.10.x as tested on Kubernetes 1.35. SUSE's matrix only says "any certified Kubernetes".
+- SUSE puts 1.10's end of maintenance at 12 May 2026. The last community 1.10 release is v1.10.2. Later 1.10 patches are SUSE Prime only.
+- [v1.11.3](https://github.com/longhorn/longhorn/releases/tag/v1.11.3) requires Kubernetes 1.34 or later, because it moves the CSI external provisioner to v6.3.0. It supports upgrades from any v1.10.x.
+- Every volume uses the V1 data engine, so the V2 notes in 1.12 and 1.13 don't apply.
+
+**How it's installed:** production Longhorn isn't in git and isn't a Helm release. Its resources carry no Helm labels, so it was applied as the plain manifest. Upgrade it the same way. Moving it to a HelmRelease is a separate job.
+
+1. **Check health.** Run the health checks from step 0. Every attached volume must be `healthy`, and last night's Longhorn backups and `offsite-backup` must have succeeded.
+2. **Apply the manifest.**
+
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.11.3/deploy/longhorn.yaml
+   kubectl -n longhorn-system rollout status ds/longhorn-manager --timeout=10m
+   kubectl -n longhorn-system get pods
+   ```
+
+3. **Upgrade the volume engines.** `concurrent-automatic-engine-upgrade-per-node-limit` is `0` here, so attached volumes keep the v1.10.1 engine until you upgrade them. Either set it to `1` and let Longhorn do it a volume at a time, or upgrade each volume from the UI. Wait for each to come back `healthy`. Then confirm the old engine image has no users before deleting it:
+
+   ```bash
+   kubectl -n longhorn-system get engineimages.longhorn.io
+   ```
+
+4. **Verify.** Run step 4's volume and app checks. The next night's backups must succeed.
+5. **Move the drill pin.** In a PR, set `clusters/drill/longhorn/longhorn.yaml` to `1.11.3`, so the restore drill still reads backups with the production version.
+
+**Rollback:** Longhorn doesn't support downgrades. If the upgrade goes wrong, fix forward, and use the Longhorn and off-site backups as the safety net. This is why step 1's backup check matters.
+
 ## 6. Phase 3: Flux 2.10
 
 Run this only with both nodes on 1.35 and a clean soak.
@@ -195,4 +228,5 @@ Move them in step with Flux, as a separate PR. Renovate doesn't update `clusters
 
 - Delete `/usr/local/bin/k3s.previous` on both nodes and the `~/k3s-server-*.age` snapshots.
 - Consider adding the k3s version to Renovate's scope, so the cluster doesn't drift this far again.
-- Upgrade Longhorn as its own change.
+- Upgrade Longhorn to 1.12, then 1.13, each as its own change, and move the drill pin with each.
+- Consider bringing production Longhorn under a Flux HelmRelease, as the drill cluster already is.
