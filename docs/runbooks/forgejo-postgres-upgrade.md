@@ -119,4 +119,6 @@ Then resume Flux (step 10). Anything written to Forgejo while it ran on 17 is lo
 
 ## Afterwards
 
-After about two weeks on 17, remove the `forgejo-db-pvc` object from `manifests/productivity/forgejo.yaml` in a separate PR. Flux prunes the volume. Delete the local dump at the same time.
+After about two weeks on 17, remove the `forgejo-db-pvc` object from `manifests/productivity/forgejo.yaml` in a separate PR, along with its `$patch: delete` in `clusters/drill/apps/core/kustomization.yaml`. Flux prunes the volume. Delete the local dump at the same time.
+
+Done on 2026-11-08 for the 14 → 17 upgrade. The old volume's last Longhorn backup (2026-10-24) stays in the backupstore.
