@@ -1,21 +1,4 @@
-# 1. PVCs for Forgejo DB
-# forgejo-db-pvc holds the old PG_VERSION=14 data directory. Nothing mounts it
-# since the 2026-10 upgrade to 17, but it stays defined here on purpose: it IS
-# the rollback, and removing it from this file would let Flux prune it.
-# Drop it in a separate change once 17 has run cleanly for a couple of weeks.
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: forgejo-db-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 5Gi
----
+# 1. PVC for Forgejo DB
 # PG_VERSION=17. Populated from a pg_dumpall of the 14 cluster, not by
 # pointing 17 at the old files. See docs/runbooks/forgejo-postgres-upgrade.md.
 apiVersion: v1

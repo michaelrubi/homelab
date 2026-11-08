@@ -2,7 +2,7 @@
 
 Flux v2.10.0 ([#165](https://git.rubiconetic.com/michael/homelab/pulls/165)) needs Kubernetes 1.35.2 or later, and the cluster runs v1.33.6+k3s1. Flux 2.9 already wants 1.34 or later, so the first step below also brings the running Flux back into its support range.
 
-Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1, waiting for the Sunday soak. Phase 1b (Longhorn) was added on 2026-11-06, after the Longhorn gate failed. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
+Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1. Its Sunday soak passed on 2026-11-08: kured rebooted both nodes between 03:19 and 03:48 Phoenix, and all pods, Flux objects, Longhorn volumes and that night's backups came back healthy. Phase 1b (Longhorn) is next. It was added on 2026-11-06, after the Longhorn gate failed. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
 
 | Phase | Change | Soak before the next phase |
 |---|---|---|
@@ -70,7 +70,7 @@ kubectl -n longhorn-system get volumes.longhorn.io \
 kubectl -n longhorn-system get recurringjobs.longhorn.io,backuptargets.longhorn.io
 ```
 
-Every attached volume must be `healthy`. A detached volume reports `unknown`, which is normal (`forgejo-db-pvc` will show this until it's dropped). Confirm last night's Longhorn backups and `offsite-backup` run succeeded.
+Every attached volume must be `healthy`. A detached volume reports `unknown`, which is normal. Confirm last night's Longhorn backups and `offsite-backup` run succeeded.
 
 ## 1. Snapshot the datastore
 
