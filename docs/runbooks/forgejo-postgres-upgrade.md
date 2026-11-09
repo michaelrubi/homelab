@@ -14,9 +14,15 @@ Confirm last night's Longhorn backup of `forgejo-db-pvc` completed (Longhorn UI 
 
 ## 1. Suspend Flux
 
+Suspend `flux-system` first. It applies `clusters/my-cluster/`, which contains the `manifests` Kustomization, and its next reconcile removes a `suspend` set with `kubectl patch`. That un-suspended Flux mid-window during the Forgejo 17 upgrade on 2026-11-09 ([forgejo-17-upgrade.md](forgejo-17-upgrade.md)).
+
 ```bash
+kubectl -n flux-system patch kustomization flux-system --type merge -p '{"spec":{"suspend":true}}'
 kubectl -n flux-system patch kustomization manifests --type merge -p '{"spec":{"suspend":true}}'
+kubectl -n flux-system get kustomization flux-system manifests -o jsonpath='{range .items[*]}{.metadata.name}={.spec.suspend}{"\n"}{end}'
 ```
+
+Both must print `true`.
 
 ## 2. Merge the PR and pull it locally
 
@@ -89,6 +95,7 @@ kubectl rollout status deploy/forgejo --timeout=6m
 
 ```bash
 kubectl -n flux-system patch kustomization manifests --type merge -p '{"spec":{"suspend":false}}'
+kubectl -n flux-system patch kustomization flux-system --type merge -p '{"spec":{"suspend":false}}'
 kubectl -n flux-system annotate gitrepository flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 kubectl -n flux-system get gitrepository,kustomization
 ```
