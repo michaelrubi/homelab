@@ -26,6 +26,14 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: prometheus-community
+  # Helm never updates CRDs on upgrade, and Flux skips them unless told.
+  # The chart bumps its major version whenever the operator CRDs change, so
+  # without this a major upgrade runs the new operator against old CRDs.
+  # 2026-11-09: 66 -> 93 moved the operator from 0.79.0 to 0.95.1.
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
   values:
     # 0. Chart components that do not exist on K3s.
     #
