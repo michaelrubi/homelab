@@ -8,6 +8,17 @@
         "michael"
     ],
     "timezone": "America/Phoenix",
+    "ignorePaths": [
+        "**/node_modules/**",
+        "**/bower_components/**",
+        "**/vendor/**",
+        "**/examples/**",
+        "**/__tests__/**",
+        "**/test/**",
+        "**/tests/**",
+        "**/__fixtures__/**",
+        "docs/archive/**"
+    ],
     "kubernetes": {
         "description": "Scoped to manifests/. The previous '\\.yaml$' matched every YAML in the repo, including docs/postiz-research/ and the 10k-line generated gotk-components.yaml.",
         "managerFilePatterns": [
