@@ -6,6 +6,7 @@ Forgejo is Flux's own git source, so the order follows [forgejo-postgres-upgrade
 
 - **Downtime:** a few minutes, from step 4 until the pod is ready. The startup probe allows 5 minutes for migrations.
 - **Needs:** `kubectl` access, and this repo checked out on the workstation with room for the dump.
+- **One terminal:** run every step in the same persistent shell. Rollback B uses `$DUMP` and `$COUNTS` from step 3. A shell that starts fresh for each command, such as `!` commands in Claude Code, loses them.
 - **Don't push to Forgejo** between step 3 and step 6. A rollback restores the database to step 3, and anything written after that is lost.
 - **Support:** 17.0 is not an LTS release. It's supported until **28 January 2027**, so the move to 18 has to happen before then. 15.0 LTS would have lasted until 15 July 2027.
 
@@ -32,9 +33,15 @@ Checked 2026-11-09 against the [v16.0](https://forgejo.org/2026-07-release-v16-0
 
 ## 1. Suspend Flux
 
+Suspend `flux-system` first. It applies `clusters/my-cluster/`, which contains the `manifests` Kustomization, and its next reconcile removes a `suspend` set with `kubectl patch` because that field isn't in git. On 2026-11-09 that is how #194 went live before the step 3 dump. A suspended Kustomization doesn't reconcile, so `flux-system` can't undo its own suspend.
+
 ```bash
+kubectl -n flux-system patch kustomization flux-system --type merge -p '{"spec":{"suspend":true}}'
 kubectl -n flux-system patch kustomization manifests --type merge -p '{"spec":{"suspend":true}}'
+kubectl -n flux-system get kustomization flux-system manifests -o jsonpath='{range .items[*]}{.metadata.name}={.spec.suspend}{"\n"}{end}'
 ```
+
+Both must print `true`. `kubectl get kustomization` has no suspended column, so don't rely on its default output.
 
 ## 2. Merge the PR and pull it locally
 
@@ -82,6 +89,7 @@ If the rollout fails, the migrations may have run partway. Go to rollback B, not
 
 ```bash
 kubectl -n flux-system patch kustomization manifests --type merge -p '{"spec":{"suspend":false}}'
+kubectl -n flux-system patch kustomization flux-system --type merge -p '{"spec":{"suspend":false}}'
 kubectl -n flux-system annotate gitrepository flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 kubectl -n flux-system get gitrepository,kustomization
 ```
@@ -148,4 +156,13 @@ Anything written to Forgejo while it ran on 17 is lost.
 - After about two weeks on 17, delete the local dump and `~/forgejo-counts-before.txt`.
 - Optional: remove the example and duplicated hook files that 16 no longer needs, following the [upgrade guide](https://forgejo.org/docs/v17.0/admin/upgrade/).
 - Plan the move to 18 before 28 January 2027, and re-check this table against its release notes.
-- Record the date this ran here.
+
+## Run on 2026-11-09
+
+Steps 0–2 ran with only `manifests` suspended. After #194 merged, `flux-system` reconciled, cleared that suspend, and `manifests` applied 17.0.1 at 16:15 UTC, before the step 3 dump. Forgejo was down (502) while the pod was replaced.
+
+- All migrations, v16a through v17a, finished in about a second, and Forgejo was listening at 16:15:23.
+- Two harmless warnings: `package_cleanup_rule` columns `keep_last_download_days` and `remove_last_download_days` are `BIGINT` in the database and `INTEGER` in the struct.
+- A post-upgrade dump was taken at 16:18:55 UTC: `~/forgejo-post-v17-20261109-0918.dump`, 10 MB, 1,305 TOC entries.
+- Step 5 checks all passed: login, push and delete a branch, `validate-manifests` on runner v13, the GitHub push mirror, and a pull mirror.
+- No pre-upgrade dump exists, so rollback to 15 would have meant last night's Longhorn backups. Step 1 now suspends `flux-system` too.
