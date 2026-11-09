@@ -19,7 +19,7 @@ Do A first. It's small, and it can be reverted. B is a maintenance window. Neith
 
 **Avoid k3s phases.** Don't run either part during a phase of [k3s-upgrade-1.35.md](k3s-upgrade-1.35.md), which forbids merging to `main` while one is in progress. As of 2026-11-09, phase 1b (Longhorn) and phase 2 (k3s 1.35) are planned for 9–10 November.
 
-## A. External task runners and `N8N_WEBHOOK_URL`
+## A. External task runners, `N8N_WEBHOOK_URL` and proxy hops
 
 Today the JavaScript runner runs inside the n8n container ("internal mode"), and the n8n image has no Python, so Python Code nodes can't run. The `n8nio/runners` image holds the launcher plus the JavaScript and Python runners. It runs as a sidecar in the n8n pod and connects to n8n's task broker over `localhost`.
 
@@ -30,6 +30,7 @@ Today the JavaScript runner runs inside the n8n container ("internal mode"), and
 +    N8N_WEBHOOK_URL        ← n8n-secrets/N8N_URL
 +    N8N_RUNNERS_MODE       = external
 +    N8N_RUNNERS_AUTH_TOKEN ← n8n-secrets/N8N_RUNNERS_AUTH_TOKEN
++    N8N_PROXY_HOPS         = 1
      N8N_RUNNERS_TASK_TIMEOUT = 300           (from #202, unchanged)
 +  runners                n8nio/runners:3.1.0  (tag must equal n8n's)
 +    N8N_RUNNERS_TASK_BROKER_URI = http://localhost:5679
@@ -50,6 +51,7 @@ In the `n8n-secrets` document, add `N8N_RUNNERS_AUTH_TOKEN: <the value>` under `
 ### 2. Change `manifests/automation/n8n.yaml`
 
 - Rename `WEBHOOK_URL` to `N8N_WEBHOOK_URL`. It keeps the same `secretKeyRef`.
+- Add `N8N_PROXY_HOPS=1`. Traffic arrives through cloudflared with `X-Forwarded-For` set, and without this Express doesn't trust the header. n8n 3.1.0 logs `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` on every request, and its rate limiter sees cloudflared's address for every client, so all clients share one limit.
 - Add `N8N_RUNNERS_MODE=external` and `N8N_RUNNERS_AUTH_TOKEN` from `n8n-secrets`.
 - Leave `N8N_RUNNERS_BROKER_LISTEN_ADDRESS` unset. Its default is `127.0.0.1`, and a sidecar shares the pod's network, so the broker needs no wider exposure and no NetworkPolicy change.
 - Add the `runners` container:
@@ -82,7 +84,7 @@ kubectl logs deploy/n8n-deployment -c n8n | grep -iE 'runner|deprecat|python'
 kubectl logs deploy/n8n-deployment -c runners --tail=30
 ```
 
-- The n8n log no longer mentions Python missing, internal mode or `WEBHOOK_URL`, and shows a runner registering.
+- The n8n log no longer mentions Python missing, internal mode, `WEBHOOK_URL` or `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`, and shows a runner registering.
 - A JavaScript Code node runs: open any workflow with one and run it.
 - A Python Code node runs: a new test workflow with a Code node set to Python, returning `[{"json": {"ok": True}}]`.
 - A production webhook still answers on the public URL, such as the booking form.
