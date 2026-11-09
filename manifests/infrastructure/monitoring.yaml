@@ -92,6 +92,22 @@ spec:
 
     # 1. Grafana Configuration
     grafana:
+      # 2026-11-09: the chart-generated secret held the default password
+      # long after the real one was changed in the UI. Grafana only reads
+      # GF_SECURITY_ADMIN_PASSWORD when it creates the admin user, so the two
+      # drifted silently -- and the dashboard sidecar, which authenticates
+      # with this secret, got a 401 on every reload call. Without that call,
+      # removing a dashboard ConfigMap leaves the dashboard in Grafana until
+      # the next restart.
+      #
+      # The password lives in manifests/secrets/grafana-admin.sops.yaml and
+      # was applied with `grafana cli admin reset-admin-password`. If you
+      # change it in the UI, change it in the SOPS file too.
+      admin:
+        existingSecret: grafana-admin
+        userKey: admin-user
+        passwordKey: admin-password
+
       # 2026-09-18: the chart ships no resource requests, so Grafana ran as
       # BestEffort -- first in line for the OOM killer under node pressure,
       # and invisible to the scheduler despite measuring 271Mi. Same failure
