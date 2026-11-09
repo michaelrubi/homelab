@@ -33,7 +33,7 @@ Today the JavaScript runner runs inside the n8n container ("internal mode"), and
 +    N8N_PROXY_HOPS         = 1
      N8N_RUNNERS_TASK_TIMEOUT = 300           (from #202, unchanged)
 +  runners                n8nio/runners:3.1.0  (tag must equal n8n's)
-+    N8N_RUNNERS_TASK_BROKER_URI = http://localhost:5679
++    N8N_RUNNERS_TASK_BROKER_URI = http://127.0.0.1:5679
 +    N8N_RUNNERS_AUTH_TOKEN ← n8n-secrets/N8N_RUNNERS_AUTH_TOKEN
 ```
 
@@ -56,9 +56,9 @@ In the `n8n-secrets` document, add `N8N_RUNNERS_AUTH_TOKEN: <the value>` under `
 - Leave `N8N_RUNNERS_BROKER_LISTEN_ADDRESS` unset. Its default is `127.0.0.1`, and a sidecar shares the pod's network, so the broker needs no wider exposure and no NetworkPolicy change.
 - Add the `runners` container:
   - Image `n8nio/runners:3.1.0`. Docker Hub has this tag; check `docker.n8n.io/n8nio/runners` has it too before using that registry instead.
-  - `N8N_RUNNERS_TASK_BROKER_URI=http://localhost:5679` and the same `N8N_RUNNERS_AUTH_TOKEN`.
+  - `N8N_RUNNERS_TASK_BROKER_URI=http://127.0.0.1:5679` and the same `N8N_RUNNERS_AUTH_TOKEN`. Use the IP: the broker listens on IPv4 only, and `localhost` can resolve to `::1` first.
   - Requests of `memory: 128Mi`, `cpu: 50m`, and a `512Mi` limit to start. Measure it after a week and adjust, as was done for n8n.
-  - The pod-level `runAsUser: 1000` and `fsGroup: 1000` also apply to it. Check the runners image runs as that user.
+  - Move `runAsUser: 1000` and `runAsGroup: 1000` from the pod to the n8n container, and keep `fsGroup` on the pod. The runners image runs as its own named user, `runner`, and a pod-level UID would override it.
 
 The deployment's `reloader.stakater.com/auto` annotation restarts n8n when `n8n-secrets` changes, so the secret and the manifest should land in the same PR.
 
