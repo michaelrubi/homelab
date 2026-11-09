@@ -41,6 +41,14 @@
             "enabled": false
         },
         {
+            "description": "n8n and its task runners sidecar must run the same version, so one PR moves both.",
+            "matchPackageNames": [
+                "docker.n8n.io/n8nio/n8n",
+                "n8nio/runners"
+            ],
+            "groupName": "n8n"
+        },
+        {
             "description": "LinuxServer tags are vX.Y.Z-lsN. Regex versioning ranks the -lsN rebuilds and skips the development-* and per-arch tags.",
             "matchPackageNames": [
                 "ghcr.io/linuxserver/jackett"
