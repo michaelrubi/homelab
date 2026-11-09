@@ -75,6 +75,22 @@ spec:
             secretKeyRef:
               name: torrenter-secrets
               key: OMDB_API_KEY
+        # PocketBase
+        - name: PB_URL
+          valueFrom:
+            secretKeyRef:
+              name: torrenter-secrets
+              key: PB_URL
+        - name: PB_SERVER_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: torrenter-secrets
+              key: PB_SERVER_EMAIL
+        - name: PB_SERVER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: torrenter-secrets
+              key: PB_SERVER_PASSWORD
 ---
 # 3. Torrenter Service
 apiVersion: v1
