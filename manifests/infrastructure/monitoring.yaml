@@ -12,6 +12,33 @@ spec:
   interval: 2h
   url: https://prometheus-community.github.io/helm-charts
 ---
+# Prometheus web UI on the nodes' Tailscale addresses, port 9090, where the
+# Homepage link points. Until 2026-11-09 nothing exposed it -- the chart's
+# Service is ClusterIP -- so that link had been dead since it was added.
+#
+# A separate Service rather than prometheus.service.type: LoadBalancer on
+# the chart: the chart's Service also carries the config-reloader on 8080,
+# and ServiceLB would try to take host port 8080, which vaultwarden-service
+# already holds. This one exposes 9090 and nothing else.
+#
+# The UI has no authentication, the same as pgweb and Longhorn here. The
+# admin API stays off (chart default enableAdminAPI: false), so it can
+# query but not delete series or snapshot the TSDB.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-web
+  namespace: monitoring
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: prometheus
+    operator.prometheus.io/name: kube-prometheus-stack-prometheus
+  ports:
+    - name: http-web
+      port: 9090
+      targetPort: 9090
+---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
