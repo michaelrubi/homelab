@@ -162,7 +162,7 @@ COUNTS='SELECT (SELECT count(*) FROM workflow_entity), (SELECT count(*) FROM cre
 kubectl exec deploy/postgres -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$0"' "$COUNTS" | tee ~/n8n-counts-before.txt
 ```
 
-The workflow count should be 123 or more.
+`workflow_entity` includes archived workflows, so this count is higher than the editor's list: 194 against 124 on 2026-11-09. What matters is that step 7 matches it exactly.
 
 ### 5. Stop Postgres 16
 
@@ -258,9 +258,35 @@ Then resume Flux (step 11). Anything n8n wrote while it ran on 17 is lost.
 ### Afterwards
 
 - After about two weeks on 17, remove the `postgres-pvc` object from `n8n-pg.yaml` in its own PR. Flux prunes the volume. Delete the local dump at the same time.
-- Record the date this ran here.
+
+## Run on 2026-11-09
+
+Both parts ran the same day, a few hours after #196 moved n8n to 3.1.0.
+
+**Part A** (#206) merged at about 10:49 Phoenix. The pod came up `2/2`, and n8n registered `launcher-javascript` and `launcher-python`.
+- A manual run of a JavaScript → Python Code node test succeeded (execution `239737`).
+- The same nodes behind a GET webhook returned HTTP 200 through the public URL (`239738`, `239739`).
+- After those requests, the log had no Python-missing, deprecation or `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` lines.
+- The token was added with `sops edit`. A decrypted comparison with `main` showed all 14 documents intact, with `n8n-secrets` / `N8N_RUNNERS_AUTH_TOKEN` as the only difference.
+- The test workflow, "My workflow 68" (`7IJ9vLiYZFH5vWR0`), was left published at `/webhook/runner-test-c66f735c7408` as a runner health check.
+
+**Part B** (#207) ran from about 10:58 to 11:10 Phoenix, a weekday morning rather than an evening. n8n was down from about 11:00 to 11:05: the dump file is stamped 11:00, and the first webhook on 17 ran at 11:05.
+- Flux was suspended with `flux-system` first, and both read `true` throughout.
+- The 16 dump was `~/n8n-pg16-20261109-1100.sql.gz`, 36 MB. Counts were `194|90|10032|12` (workflows, credentials, executions, packages).
+- The restore had one `ERROR`, the expected `role "n8n" already exists`. The counts matched on 17, and the server reported `17.7 (Debian 17.7-3.pgdg13+1)`.
+- After the restore, the log had no Postgres 16 warning.
+  - The runner test webhook answered.
+  - All 124 workflows were listed.
+  - New execution IDs continued from the restored sequence (`239742`).
+  - Community nodes and pgweb worked.
+- A manual `postgres-dump-standalone` run on `postgres:17-alpine` wrote a 34.5 MB dump. It spent about a minute in its `pg_isready` loop before connecting to the new pod.
+- Flux resumed `manifests` first, then `flux-system`, and both were `Ready` on `c77673d`.
+
+`kubectl apply` in step 9 printed `missing the kubectl.kubernetes.io/last-applied-configuration annotation` for each object Flux had created. That's expected: Flux takes them back on its next reconcile.
 
 ## Also due
 
 - Around 2026-11-17: delete `~/.n8n/nodes.bak-20261103` on `n8n-pvc`.
 - Around 2026-11-23: delete `~/n8n-pre-v3-20261109-0958.dump`, the dump taken before #196, once 3.x has run cleanly for two weeks.
+- Around 2026-11-23: the `postgres-pvc` removal PR from part B's Afterwards, then delete `~/n8n-pg16-20261109-1100.sql.gz` and `~/n8n-counts-before.txt`.
+- Check why the newest `postgres-temporal-*` dump on the NFS share is from 2026-11-03.
