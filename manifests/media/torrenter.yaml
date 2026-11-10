@@ -54,6 +54,10 @@ spec:
           value: "True-Client-IP"
         - name: XFF_DEPTH
           value: "1"
+        # Without this, adapter-node assumes https and rejects form posts (e.g. login)
+        # from the plain-HTTP Tailscale URL as cross-site.
+        - name: ORIGIN
+          value: "http://wtc2.robin-mine.ts.net:4173"
         # App Specific Config
         - name: JACKETT_URL
           valueFrom:
