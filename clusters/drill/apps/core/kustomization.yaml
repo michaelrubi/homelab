@@ -21,13 +21,6 @@ patches:
       metadata:
         name: runner-config
         namespace: default
-  - patch: |-
-      $patch: delete
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: forgejo-db-pvc
-        namespace: default
   # Bind to the volumes `restore-drill.sh volumes` restores, not new empty ones.
   - patch: |-
       apiVersion: v1

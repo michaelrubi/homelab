@@ -1,0 +1,46 @@
+# One-off pod for the rollback in docs/runbooks/forgejo-17-upgrade.md. NOT
+# part of the kustomization: apply it by hand and delete it afterwards.
+#
+# It starts Postgres on the existing forgejo-db-pvc-17 while the Forgejo pod
+# is scaled to zero, so the database can be dropped and restored with no
+# Forgejo process able to connect. A restarting Forgejo would see an empty
+# `forgejo` database and create a fresh schema in it, because INSTALL_LOCK
+# is set.
+#
+# The data directory is already initialised, so the entrypoint skips initdb
+# and the POSTGRES_* variables only matter for the readiness probe.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: forgejo-db-rollback
+  namespace: default
+spec:
+  restartPolicy: Never
+  securityContext:
+    # Same as the Forgejo pod.
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+  containers:
+    - name: postgres
+      image: postgres:17-alpine
+      env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_USER
+          value: forgejo
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: forgejo-secrets
+              key: FORGEJO_DB_PASSWORD
+      readinessProbe:
+        exec:
+          command: ["pg_isready", "-h", "127.0.0.1", "-U", "forgejo", "-d", "postgres"]
+        periodSeconds: 5
+      volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+  volumes:
+    - name: db-data
+      persistentVolumeClaim:
+        claimName: forgejo-db-pvc-17

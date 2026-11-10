@@ -1,0 +1,57 @@
+# One-off pod for part B of docs/runbooks/n8n-3-followups.md. NOT part of
+# the kustomization: apply it by hand during the upgrade and delete it
+# afterwards.
+#
+# It initialises an empty PG17 cluster on postgres-pvc-17 with the same
+# layout as the n8n `postgres` Deployment: the volume mounted with
+# subPath `data` at the image's default PGDATA, fsGroup 999, and the
+# user and password from n8n-db-secrets. POSTGRES_DB is overridden to
+# `postgres` on purpose: the dump's own CREATE DATABASE then creates `n8n`
+# with its original owner and settings. `env` wins over `envFrom`.
+#
+# postgres:17, not 17-alpine, for the same reason as the Deployment: the
+# dump carries glibc locale names that a musl build may not have.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc-17
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: n8n-pg17-restore
+  namespace: default
+spec:
+  restartPolicy: Never
+  securityContext:
+    fsGroup: 999
+    fsGroupChangePolicy: OnRootMismatch
+  containers:
+    - name: postgres
+      image: postgres:17
+      envFrom:
+        - secretRef:
+            name: n8n-db-secrets
+      env:
+        - name: POSTGRES_DB
+          value: postgres
+      readinessProbe:
+        exec:
+          command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d postgres"]
+        periodSeconds: 5
+      volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+          subPath: data
+  volumes:
+    - name: postgres-data
+      persistentVolumeClaim:
+        claimName: postgres-pvc-17

@@ -12,6 +12,33 @@ spec:
   interval: 2h
   url: https://prometheus-community.github.io/helm-charts
 ---
+# Prometheus web UI on the nodes' Tailscale addresses, port 9090, where the
+# Homepage link points. Until 2026-11-09 nothing exposed it -- the chart's
+# Service is ClusterIP -- so that link had been dead since it was added.
+#
+# A separate Service rather than prometheus.service.type: LoadBalancer on
+# the chart: the chart's Service also carries the config-reloader on 8080,
+# and ServiceLB would try to take host port 8080, which vaultwarden-service
+# already holds. This one exposes 9090 and nothing else.
+#
+# The UI has no authentication, the same as pgweb and Longhorn here. The
+# admin API stays off (chart default enableAdminAPI: false), so it can
+# query but not delete series or snapshot the TSDB.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-web
+  namespace: monitoring
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: prometheus
+    operator.prometheus.io/name: kube-prometheus-stack-prometheus
+  ports:
+    - name: http-web
+      port: 9090
+      targetPort: 9090
+---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -22,10 +49,18 @@ spec:
   chart:
     spec:
       chart: kube-prometheus-stack
-      version: "66.x"
+      version: "93.x"
       sourceRef:
         kind: HelmRepository
         name: prometheus-community
+  # Helm never updates CRDs on upgrade, and Flux skips them unless told.
+  # The chart bumps its major version whenever the operator CRDs change, so
+  # without this a major upgrade runs the new operator against old CRDs.
+  # 2026-11-09: 66 -> 93 moved the operator from 0.79.0 to 0.95.1.
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
   values:
     # 0. Chart components that do not exist on K3s.
     #
@@ -84,6 +119,22 @@ spec:
 
     # 1. Grafana Configuration
     grafana:
+      # 2026-11-09: the chart-generated secret held the default password
+      # long after the real one was changed in the UI. Grafana only reads
+      # GF_SECURITY_ADMIN_PASSWORD when it creates the admin user, so the two
+      # drifted silently -- and the dashboard sidecar, which authenticates
+      # with this secret, got a 401 on every reload call. Without that call,
+      # removing a dashboard ConfigMap leaves the dashboard in Grafana until
+      # the next restart.
+      #
+      # The password lives in manifests/secrets/grafana-admin.sops.yaml and
+      # was applied with `grafana cli admin reset-admin-password`. If you
+      # change it in the UI, change it in the SOPS file too.
+      admin:
+        existingSecret: grafana-admin
+        userKey: admin-user
+        passwordKey: admin-password
+
       # 2026-09-18: the chart ships no resource requests, so Grafana ran as
       # BestEffort -- first in line for the OOM killer under node pressure,
       # and invisible to the scheduler despite measuring 271Mi. Same failure
@@ -304,6 +355,22 @@ spec:
               group_interval: 5m
               repeat_interval: 5m
 
+            # A copy of each critical alert goes to wiki-assistant on the Mac
+            # mini, which looks the alert up in the runbooks and wiki and
+            # sends a second, lower-priority ntfy push with the likely cause
+            # and first checks. `continue: true` is what keeps this additive:
+            # matching continues to ntfy-critical below, so the page itself
+            # never depends on the Mac. If the Mac is off, Alertmanager's
+            # retries for this receiver fail on their own and nothing else
+            # is affected. The service also dedupes per alert for 6h, so the
+            # hourly repeat below doesn't produce hourly follow-ups.
+            #
+            # ROLLBACK: delete this route; the receiver can stay.
+            - receiver: wiki-assistant
+              matchers:
+                - severity = "critical"
+              continue: true
+
             # Critical alerts re-notify aggressively, and are the only
             # ones worth a "this cleared" message. See ntfy-critical.
             - receiver: ntfy-critical
@@ -381,6 +448,21 @@ spec:
               - url_file: /etc/alertmanager/secrets/alertmanager-webhooks/ntfy-critical-url
                 send_resolved: true
                 max_alerts: 0
+
+          # wiki-assistant (its own repo, not yet on Forgejo) on the Mac mini, reached over Tailscale: both nodes route
+          # 100.64.0.0/10 via tailscale0, and pod traffic leaves with the
+          # node's address. It only serves the tailnet and requires the
+          # bearer token, which lives in the same SOPS secret as the URLs
+          # above. It answers 202 at once and works after responding.
+          - name: wiki-assistant
+            webhook_configs:
+              - url: http://100.72.155.47:8787/events/alertmanager
+                send_resolved: false
+                max_alerts: 0
+                http_config:
+                  authorization:
+                    type: Bearer
+                    credentials_file: /etc/alertmanager/secrets/alertmanager-webhooks/wiki-assistant-token
 
           - name: deadmansswitch
             webhook_configs:

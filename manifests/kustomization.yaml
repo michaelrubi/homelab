@@ -68,6 +68,7 @@ resources:
 - productivity/forgejo.yaml
 - secrets/secrets.sops.yaml
 - secrets/alertmanager-webhooks.sops.yaml
+- secrets/grafana-admin.sops.yaml
 - productivity/obsidian-sync.yaml
 
 # ---------------------------------------------------------------------------

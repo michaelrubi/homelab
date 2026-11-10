@@ -12,6 +12,22 @@ spec:
     requests:
       storage: 5Gi
 ---
+# 1b. The Postgres 17 volume. Restored from a pg_dumpall of the 16 cluster
+# by docs/runbooks/n8n-3-followups.md, part B. postgres-pvc above is kept,
+# unused, as the rollback until it's removed in a later PR.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc-17
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 5Gi
+---
 # 2. The Database Service
 apiVersion: v1
 kind: Service
@@ -65,7 +81,11 @@ spec:
         #
         # Switching is a dump/restore (or a REINDEX of every text index), not
         # a tag edit. The ~150MB of extra image size is the cheaper option.
-        image: postgres:16
+        #
+        # 2026-11: upgraded 16 -> 17 (n8n 3.x supports 17+ only) by dump and
+        # restore into postgres-pvc-17, still on the glibc image.
+        # docs/runbooks/n8n-3-followups.md part B is the procedure.
+        image: postgres:17
         ports:
         - containerPort: 5432
         # 2026-09-11: no requests were set, so the scheduler treated this
@@ -86,4 +106,4 @@ spec:
       volumes:
       - name: postgres-data
         persistentVolumeClaim:
-          claimName: postgres-pvc
+          claimName: postgres-pvc-17
