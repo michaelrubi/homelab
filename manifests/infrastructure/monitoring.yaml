@@ -355,6 +355,22 @@ spec:
               group_interval: 5m
               repeat_interval: 5m
 
+            # A copy of each critical alert goes to wiki-assistant on the Mac
+            # mini, which looks the alert up in the runbooks and wiki and
+            # sends a second, lower-priority ntfy push with the likely cause
+            # and first checks. `continue: true` is what keeps this additive:
+            # matching continues to ntfy-critical below, so the page itself
+            # never depends on the Mac. If the Mac is off, Alertmanager's
+            # retries for this receiver fail on their own and nothing else
+            # is affected. The service also dedupes per alert for 6h, so the
+            # hourly repeat below doesn't produce hourly follow-ups.
+            #
+            # ROLLBACK: delete this route; the receiver can stay.
+            - receiver: wiki-assistant
+              matchers:
+                - severity = "critical"
+              continue: true
+
             # Critical alerts re-notify aggressively, and are the only
             # ones worth a "this cleared" message. See ntfy-critical.
             - receiver: ntfy-critical
@@ -432,6 +448,21 @@ spec:
               - url_file: /etc/alertmanager/secrets/alertmanager-webhooks/ntfy-critical-url
                 send_resolved: true
                 max_alerts: 0
+
+          # wiki-assistant (its own repo, not yet on Forgejo) on the Mac mini, reached over Tailscale: both nodes route
+          # 100.64.0.0/10 via tailscale0, and pod traffic leaves with the
+          # node's address. It only serves the tailnet and requires the
+          # bearer token, which lives in the same SOPS secret as the URLs
+          # above. It answers 202 at once and works after responding.
+          - name: wiki-assistant
+            webhook_configs:
+              - url: http://100.72.155.47:8787/events/alertmanager
+                send_resolved: false
+                max_alerts: 0
+                http_config:
+                  authorization:
+                    type: Bearer
+                    credentials_file: /etc/alertmanager/secrets/alertmanager-webhooks/wiki-assistant-token
 
           - name: deadmansswitch
             webhook_configs:
