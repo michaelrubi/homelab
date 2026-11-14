@@ -55,7 +55,7 @@ spec:
 
       containers:
       - name: n8n
-        image: docker.n8n.io/n8nio/n8n:3.2.0
+        image: docker.n8n.io/n8nio/n8n:3.2.2
         securityContext:
           runAsUser: 1000
           runAsGroup: 1000
@@ -156,7 +156,7 @@ spec:
       # Task runner launcher with the JavaScript and Python runners. Its tag
       # must equal n8n's; renovate.json groups the two.
       - name: runners
-        image: n8nio/runners:3.2.0
+        image: n8nio/runners:3.2.2
         resources:
           requests:
             memory: "128Mi"

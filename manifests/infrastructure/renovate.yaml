@@ -45,7 +45,7 @@ spec:
                           - thinkcentre02
           containers:
             - name: renovate
-              image: renovate/renovate:44.226.0
+              image: renovate/renovate:44.230.0
               imagePullPolicy: IfNotPresent
               env:
                 # Tell Renovate we are using Forgejo
