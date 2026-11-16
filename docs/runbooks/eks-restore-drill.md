@@ -38,7 +38,7 @@ Don't print any of these into a chat. Run them in a terminal outside the app.
 
 `terraform/restore-drill/`, separate state from `offsite-backups`, so destroying it can't touch the bucket.
 
-- EKS on Kubernetes 1.34, one minor above the cluster's 1.33 and on standard support until 2026-12-01. After that date, use the oldest version still on standard support.
+- EKS on Kubernetes 1.35, the same minor as the cluster. EKS 1.34 leaves standard support on 2026-12-01; always use a version still on standard support.
 - Two `t3.large` on-demand nodes with 100 GB gp3, in public subnets. The account's on-demand limit is 5 vCPUs, so these four leave no room for a third node.
 - No NAT gateway. An S3 gateway endpoint keeps restore traffic in the region, which is free.
 - API endpoint limited to the home IP.
