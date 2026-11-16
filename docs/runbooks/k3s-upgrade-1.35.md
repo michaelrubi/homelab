@@ -2,7 +2,7 @@
 
 Flux v2.10.0 ([#165](https://git.rubiconetic.com/michael/homelab/pulls/165)) needs Kubernetes 1.35.2 or later, and the cluster runs v1.33.6+k3s1. Flux 2.9 already wants 1.34 or later, so the first step below also brings the running Flux back into its support range.
 
-Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1. Its Sunday soak passed on 2026-11-08: kured rebooted both nodes between 03:19 and 03:48 Phoenix, and all pods, Flux objects, Longhorn volumes and that night's backups came back healthy. Phase 1b ran on 2026-11-10: production Longhorn is on v1.11.3, all 12 volumes moved to the new engine and came back healthy, and the v1.10.1 engine image was deleted. Its soak is one night of backups, then phase 2. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
+Phase 1 ran on 2026-11-04: both nodes are on v1.34.12+k3s1. Its Sunday soak passed on 2026-11-08: kured rebooted both nodes between 03:19 and 03:48 Phoenix, and all pods, Flux objects, Longhorn volumes and that night's backups came back healthy. Phase 1b ran on 2026-11-10: production Longhorn is on v1.11.3, all 12 volumes moved to the new engine and came back healthy, and the v1.10.1 engine image was deleted. Its soak (one night of backups) passed on 2026-11-11. Phase 2 ran on 2026-11-11 at 14:30 Phoenix: both nodes are on v1.35.9+k3s1 with containerd 2.2.7. Traefik stayed on chart 40.1.5, so it didn't restart. Pods, Flux, all 11 attached Longhorn volumes, cross-node pod traffic and git.rubiconetic.com checked out. A `FluxGitRepositoryAuthenticationfailed` alert fired during the server restart, and the source was Ready again afterwards. Its Sunday soak passed on 2026-11-15: kured rebooted both nodes, and pods, Flux, Longhorn volumes and the offsite backups came back healthy. Next: phase 3. Versions and findings for later phases are from 2026-11-02, so re-check them before starting.
 
 | Phase | Change | Soak before the next phase |
 |---|---|---|
@@ -212,7 +212,7 @@ Run this only with both nodes on 1.35 and a clean soak.
    - `Provider/alertmanager` and `Alert/flux-reconciliation-errors` use none of the fields dropped in `v1`.
 4. Merge #165, then run `flux check` and `flux get all -A`.
 5. Prove alerting still works, using the alert-router harness in `scripts/`. A broken notification path is the failure this cluster has been caught by before ([post-mortem](../postmortems/2026-09-silent-alerts.md)).
-6. In a later PR, move `manifests/infrastructure/flux-alerts.yaml` from `v1beta3` to `v1`.
+6. In a later PR, move `manifests/infrastructure/flux-alerts.yaml` from `v1beta3` to `v1`. In the same PR, remove the `renovate.json` rule that disables the `alert` and `provider` bumps. It was added in #223 after Renovate moved the file to `v1` early, on Flux 2.9, which broke the `manifests` Kustomization.
 
 **Rollback is not a clean revert.** Once the notification CRDs store `v1`, an older CRD without that version can be rejected until `status.storedVersions` is fixed by hand. If Flux itself breaks, it can't deploy its own repair, so you'd apply the previous `gotk-components.yaml` with `kubectl`.
 
