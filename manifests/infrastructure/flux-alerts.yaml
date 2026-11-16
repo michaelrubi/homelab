@@ -70,7 +70,7 @@ spec:
 # The payload carries Flux's actual error text rather than a generic
 # summary -- "may not add resource with an already registered id: ..." is
 # the whole diagnosis, in the notification.
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: alertmanager
@@ -79,7 +79,7 @@ spec:
   type: alertmanager
   address: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093/api/v2/alerts
 ---
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: flux-reconciliation-errors
