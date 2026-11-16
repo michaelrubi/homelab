@@ -211,7 +211,7 @@ Run this only with both nodes on 1.35 and a clean soak.
    - Nothing uses `serviceaccounts/token`, `kubeConfig` or the `ObjectLevelWorkloadIdentity` gate.
    - `Provider/alertmanager` and `Alert/flux-reconciliation-errors` use none of the fields dropped in `v1`.
 4. Merge #165, then run `flux check` and `flux get all -A`.
-5. Prove alerting still works, using the alert-router harness in `scripts/`. A broken notification path is the failure this cluster has been caught by before ([post-mortem](../postmortems/2026-09-silent-alerts.md)).
+5. Prove alerting still works: post a `severity=warning` test alert with `amtool alert add` in the Alertmanager pod, with an explicit `--start` and an `--end` 15 minutes later. Don't name it `Flux*`: that route waits 30 minutes before sending. Confirm `alert_router_received_total` goes up and the page reaches ntfy. Wording like "ignore" can make the classifier suppress it. A broken notification path is the failure this cluster has been caught by before ([post-mortem](../postmortems/2026-09-silent-alerts.md)).
 6. In a later PR, move `manifests/infrastructure/flux-alerts.yaml` from `v1beta3` to `v1`. In the same PR, remove the `renovate.json` rule that disables the `alert` and `provider` bumps. It was added in #223 after Renovate moved the file to `v1` early, on Flux 2.9, which broke the `manifests` Kustomization.
 
 **Rollback is not a clean revert.** Once the notification CRDs store `v1`, an older CRD without that version can be rejected until `status.storedVersions` is fixed by hand. If Flux itself breaks, it can't deploy its own repair, so you'd apply the previous `gotk-components.yaml` with `kubectl`.
