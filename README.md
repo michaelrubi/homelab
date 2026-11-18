@@ -82,6 +82,7 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 - [Forgejo repositories lost their git data](docs/postmortems/2026-06-forgejo-repository-loss.md): 37 repositories lost their objects, and backups had already aged out.
 - [Postiz down for 15 hours on an image pull](docs/postmortems/2026-10-postiz-image-pull.md): a bad pull credential met a routine update, and alerts fired that never reached the phone.
 - [First EKS restore drill](docs/postmortems/2026-10-eks-restore-drill.md): Forgejo and Kaneo restored from S3 alone, and the drill's own script hung for 2.5 hours.
+- [An NFS stall that ended in a 1,556-process OOM](docs/postmortems/2026-10-oom-and-longhorn-io.md): a flapping Tailscale link hung the backup mount, stuck processes piled up, and nothing alerted for four weeks.
 
 ## Backups
 
