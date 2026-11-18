@@ -158,6 +158,84 @@ spec:
               against actual usage before it starts thrashing:
               kubectl top pods -A --sort-by=memory
 
+    - name: kernel.rules
+      rules:
+        - alert: NodeOOMKill
+          # 2026-10-21 20:58 UTC: the kernel on thinkcentre01 killed 1,556
+          # processes in one second and nothing alerted. NodeMemoryCritical
+          # needs 15m under 12%, and this built up in about 20 minutes over
+          # a network link that was also dropping scrapes.
+          #
+          # [1h], not [5m]: increase() needs two samples inside the window.
+          # If the node can't be scraped for a while around the kill, a short
+          # window misses the jump completely. The cost is that the alert
+          # resolves up to an hour after the kill.
+          expr: max by (instance) (increase(node_vmstat_oom_kill[1h])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Kernel OOM killer ran on {{ $labels.instance }}"
+            description: >-
+              {{ $value | printf "%.0f" }} process(es) killed in the last hour.
+              See which ones (plain `journalctl -k` only shows the current boot):
+              journalctl _TRANSPORT=kernel --since -1h | grep -E 'Killed process|invoked oom-killer'
+
+        - alert: ContainerOOMKilled
+          # A container hitting its own memory limit (cgroup OOM). The
+          # restart-increase join makes this fire once per kill. Without it,
+          # last_terminated_reason stays "OOMKilled" until the next restart
+          # and the alert would never clear.
+          expr: |
+            max by (namespace, pod, container) (kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}) == 1
+            and on (namespace, pod, container)
+            max by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total[10m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOMKilled"
+            description: >-
+              The container went over its memory limit and was restarted.
+              Compare its limit with real usage:
+              kubectl top pod -n {{ $labels.namespace }} {{ $labels.pod }} --containers
+
+        - alert: PodProcessPileUp
+          # The cause of 2026-10-21: the NFS backup target stopped answering,
+          # and every `longhorn` and `umount` process Longhorn started to
+          # poll it got stuck. 1,218 + 336 of them piled up until the node
+          # ran out of memory. In the 14 days before this rule was added, no
+          # pod went above 39 processes (the instance managers), so 150 is
+          # well clear of normal.
+          expr: max by (namespace, pod, node) (container_processes{container!=""}) > 150
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} has {{ $value }} processes on {{ $labels.node }}"
+            description: >-
+              Processes are piling up instead of exiting, usually because
+              they are stuck on a dead NFS mount. On 10-21 this ended in an
+              OOM about 20 minutes later. See what the processes are and
+              whether NFS is timing out:
+              ssh <cptc1 or wtc2> "ps -eo stat=,comm= | sort | uniq -c | sort -rn | head; journalctl -k --since -1h | grep -i nfs | tail"
+
+        - alert: NFSClientRetransmitting
+          # The trigger on 10-21 and 10-22: "nfs: server thinkcentre02 not
+          # responding, timed out" on thinkcentre01, which mounts the
+          # Longhorn backup target and the postgres-dumps export over
+          # Tailscale. Retransmissions were 0 on both nodes for the 14 days
+          # before this rule was added, so any sustained count is real.
+          expr: max by (instance) (increase(node_nfs_rpc_retransmissions_total[10m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NFS client on {{ $labels.instance }} is retransmitting"
+            description: >-
+              The NFS server (thinkcentre02) is slow or unreachable from
+              this node. Stuck mounts pile up processes (see PodProcessPileUp).
+              Check the link between the nodes first:
+              tailscale status; tailscale ping thinkcentre02
+
     - name: livesync.rules
       rules:
         - alert: LiveSyncDeviceStale
