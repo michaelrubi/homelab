@@ -60,11 +60,12 @@ Written 2026-11-18 on `feat/kernel-alerts`. Each expression was run against live
 ### 4. Verify end to end
 - [x] `kustomize build` and a server-side dry-run (both PrometheusRules accepted).
 - [x] Check each `expr` in the Prometheus UI before merging, and confirm it returns series, not empty.
-- [ ] Fire one test alert through ntfy and confirm it arrives. Don't name test alerts `Flux*`, or the Flux 2.10 alert routing will catch them.
+- [x] Fire one test alert through ntfy and confirm it arrives. Don't name test alerts `Flux*`, or the Flux 2.10 alert routing will catch them.
+  2026-11-18, after #235 merged: all six rules loaded with `health=ok`. A test alert worded as a test was suppressed by the alert router (`suppress`, 0.91). `NodeOOMKillDeliveryCheck`, worded like the real rule, got `page_now` (0.89) with 0 ntfy errors.
 
 ### 5. Write it up
-- [ ] Add `docs/postmortems/2026-10-oom-and-longhorn-io.md` covering 10-21 and 10-22, and link it from the README.
-- [ ] Runbook note: use `journalctl _TRANSPORT=kernel` (or `-k -b all`) for history. Plain `journalctl -k` only shows the current boot.
+- [x] Add `docs/postmortems/2026-10-oom-and-longhorn-io.md` covering 10-21 and 10-22, and link it from the README.
+- [x] Runbook note (in the postmortem's Lessons and in the alert descriptions): use `journalctl _TRANSPORT=kernel` (or `-k -b all`) for history. Plain `journalctl -k` only shows the current boot.
 
 ## Out of scope
 - Shipping kernel logs off the nodes (Loki or similar). Worth doing later; it would catch hung tasks and NIC flaps, which have no metric.
