@@ -7,7 +7,7 @@ variable "region" {
 variable "kubernetes_version" {
   description = "EKS version. Must be on standard support, or the cluster bills six times as much."
   type        = string
-  default     = "1.34"
+  default     = "1.35"
 }
 
 variable "home_ip_cidr" {
