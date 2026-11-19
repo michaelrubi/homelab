@@ -110,7 +110,10 @@ spec:
           image: restic/restic:0.19.1
           args:
             - --no-lock
-            - --no-cache
+            # Without a cache, restic fetches every tree one request at a time,
+            # twice: before the download and again to set metadata. That took
+            # about 50 of the 63 minutes in the second drill, 2026-11-19.
+            - --cache-dir=/cache
             - restore
             - latest:/backups
             - --host=thinkcentre02
@@ -131,7 +134,11 @@ spec:
           volumeMounts:
             - name: target
               mountPath: /target
+            - name: cache
+              mountPath: /cache
       volumes:
+        - name: cache
+          emptyDir: {}
         - name: target
           nfs:
             server: 172.20.200.50

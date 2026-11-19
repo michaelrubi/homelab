@@ -1,6 +1,6 @@
 # Runbook: EKS restore drill
 
-**Status:** run once, on 2026-10-31. It passed, and Forgejo was ready in 1 hour 19 minutes. See the [post-mortem](../postmortems/2026-10-eks-restore-drill.md). Its script fixes haven't been run on a cluster yet.
+**Status:** run twice. Both passed. Forgejo was ready in 1 hour 19 minutes on 2026-10-31 and in 1 hour 26 minutes on 2026-11-19. See the [first](../postmortems/2026-10-eks-restore-drill.md) and [second](../postmortems/2026-11-eks-restore-drill-2.md) post-mortems. The restic cache added after the second drill hasn't been run on a cluster yet.
 
 Restores Forgejo from the S3 backup into a temporary EKS cluster, times it, proves the data is correct, and destroys the cluster. It closes the "Volume restore is unproven" limitation in the README.
 
@@ -66,6 +66,8 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh baseline
    ```
 
+   Run the `terraform init` from step 2 now too. Renovate updates the provider lock file, and a stale cache fails the apply after the clock has started.
+
 2. **Start the clock** and create the cluster. `<state_bucket>` is the bootstrap output:
 
    ```bash
@@ -94,7 +96,7 @@ Run against an automated nightly snapshot, not one taken by hand. `scripts/resto
    scripts/restore-drill.sh secrets
    ```
 
-5. **Restore.** Waits for restic to rebuild the backupstore, then restores `forgejo-data-pvc` and `forgejo-db-pvc-17` and waits for Forgejo. Restic took 43 minutes in the first drill, and the volumes took a few more. The step prints nothing while it waits, so check `kubectl get pods` and the volume states if it goes quiet for long after that. Each volume wait stops the step after 30 minutes, and `WAIT_TIMEOUT` (in seconds) changes that:
+5. **Restore.** Waits for restic to rebuild the backupstore, then restores `forgejo-data-pvc` and `forgejo-db-pvc-17` and waits for Forgejo. Restic took 43 minutes in the first drill and 63 in the second, and the volumes took a few more. The step prints nothing while it waits, so check `kubectl get pods` and the volume states if it goes quiet for long after that. Each volume wait stops the step after 30 minutes, and `WAIT_TIMEOUT` (in seconds) changes that:
 
    ```bash
    scripts/restore-drill.sh volumes

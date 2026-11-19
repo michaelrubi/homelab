@@ -91,4 +91,4 @@ The Kaneo load reported 6 errors, and none mattered: the role and database alrea
 | Add a timeout to `wait_restored` and the other polling wait | Done, not yet run on a cluster |
 | Decide whether a day of Forgejo data loss is acceptable | Open |
 | Clean up the 35 repositories with no git data | Open |
-| Re-run the drill to confirm both fixes and the one-hour estimate | Open |
+| Re-run the drill to confirm both fixes and the one-hour estimate | Done 2026-11-19: both fixes held, but Forgejo took 1h 26m. See the [second drill](2026-11-eks-restore-drill-2.md) |

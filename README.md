@@ -82,6 +82,7 @@ The cluster-wide resource policy, with the measurements behind it, is at the top
 - [Forgejo repositories lost their git data](docs/postmortems/2026-06-forgejo-repository-loss.md): 37 repositories lost their objects, and backups had already aged out.
 - [Postiz down for 15 hours on an image pull](docs/postmortems/2026-10-postiz-image-pull.md): a bad pull credential met a routine update, and alerts fired that never reached the phone.
 - [First EKS restore drill](docs/postmortems/2026-10-eks-restore-drill.md): Forgejo and Kaneo restored from S3 alone, and the drill's own script hung for 2.5 hours.
+- [Second EKS restore drill](docs/postmortems/2026-11-eks-restore-drill-2.md): both fixes held, and restic spent most of its 63 minutes on uncached requests.
 - [An NFS stall that ended in a 1,556-process OOM](docs/postmortems/2026-10-oom-and-longhorn-io.md): a flapping Tailscale link hung the backup mount, stuck processes piled up, and nothing alerted for four weeks.
 
 ## Backups
@@ -97,6 +98,8 @@ The S3 bucket, IAM user, and budget alert are [Terraform](terraform/offsite-back
 Dump jobs and the off-site job alert if they miss a run. On 2026-10-30, the first off-site backup was restored from S3 and the Postgres dumps matched the originals exactly.
 
 On 2026-10-31, a [timed drill](docs/runbooks/eks-restore-drill.md) restored Forgejo and Kaneo into a temporary EKS cluster from S3 alone. Forgejo was ready in 1 hour 19 minutes, about 19 of them lost to an error in the drill. All 77 repositories came back with no `git fsck` failures, and Kaneo's row counts matched exactly. The [write-up](docs/postmortems/2026-10-eks-restore-drill.md) covers everything that went wrong.
+
+On 2026-11-19, a second drill restored Forgejo 17 in 1 hour 26 minutes, with no errors or hangs. All 86 repositories passed `git fsck`. Restic spent about 50 of its 63 minutes on uncached requests, and the [write-up](docs/postmortems/2026-11-eks-restore-drill-2.md) covers the fix.
 
 ## Known limitations
 
