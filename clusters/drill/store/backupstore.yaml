@@ -107,7 +107,7 @@ spec:
       serviceAccountName: drill-restic
       containers:
         - name: restic
-          image: restic/restic:0.19.1
+          image: restic/restic:0.20.0
           args:
             - --no-lock
             # Without a cache, restic fetches every tree one request at a time,

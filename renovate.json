@@ -65,6 +65,19 @@
                 "ghcr.io/linuxserver/jackett"
             ],
             "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-ls(?<build>\\d+)$"
+        },
+        {
+            "description": "Postgres major upgrades require a dump and restore into a new volume (docs/runbooks/forgejo-postgres-upgrade.md); an in-place tag bump breaks the database.",
+            "matchDatasources": [
+                "docker"
+            ],
+            "matchPackageNames": [
+                "postgres"
+            ],
+            "matchUpdateTypes": [
+                "major"
+            ],
+            "enabled": false
         }
     ]
 }
