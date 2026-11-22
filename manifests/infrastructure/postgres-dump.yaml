@@ -107,7 +107,7 @@ spec:
           - name: pg-dump
             # Must be at least the server's major: pg_dumpall 16 refuses to
             # dump the 17 server in manifests/automation/n8n-pg.yaml.
-            image: postgres:17-alpine
+            image: postgres:17.12-alpine
             command: ["/bin/sh", "-c"]
             args:
               - |
