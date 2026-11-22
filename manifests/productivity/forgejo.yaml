@@ -92,7 +92,7 @@ spec:
           # restore into a NEW volume, leaving the 14 volume untouched for
           # rollback. docs/runbooks/forgejo-postgres-upgrade.md is the procedure;
           # reuse it for the next major.
-          image: postgres:17-alpine
+          image: postgres:17.12-alpine
           env:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
