@@ -1,20 +1,6 @@
 # 1. The Storage Claim
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: longhorn
-  resources:
-    requests:
-      storage: 5Gi
----
-# 1b. The Postgres 17 volume. Restored from a pg_dumpall of the 16 cluster
-# by docs/runbooks/n8n-3-followups.md, part B. postgres-pvc above is kept,
-# unused, as the rollback until it's removed in a later PR.
+# PG_VERSION=17. Restored from a pg_dumpall of the 16 cluster by
+# docs/runbooks/n8n-3-followups.md, part B.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
