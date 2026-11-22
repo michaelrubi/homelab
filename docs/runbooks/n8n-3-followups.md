@@ -259,6 +259,8 @@ Then resume Flux (step 11). Anything n8n wrote while it ran on 17 is lost.
 
 - After about two weeks on 17, remove the `postgres-pvc` object from `n8n-pg.yaml` in its own PR. Flux prunes the volume. Delete the local dump at the same time.
 
+Done on 2026-11-22 for the 16 → 17 upgrade. The old volume's last Longhorn backup (2026-11-09) stays in the backupstore.
+
 ## Run on 2026-11-09
 
 Both parts ran the same day, a few hours after #196 moved n8n to 3.1.0.
