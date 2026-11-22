@@ -67,7 +67,7 @@
             "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-ls(?<build>\\d+)$"
         },
         {
-            "description": "Postgres major upgrades require a dump and restore into a new volume (docs/runbooks/forgejo-postgres-upgrade.md); an in-place tag bump breaks the database.",
+            "description": "Postgres major upgrades require a dump and restore into a new volume (docs/runbooks/forgejo-postgres-upgrade.md). Stay on 17 until an app requires newer or 1 year before EOL (November 2028), whichever comes first.",
             "matchDatasources": [
                 "docker"
             ],
