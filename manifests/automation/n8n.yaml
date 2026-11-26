@@ -161,9 +161,16 @@ spec:
           requests:
             memory: "128Mi"
             cpu: "50m"
+          # 512Mi was OOMKilled by Outbound: Lead Enrichment on 2026-11-26.
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
         env:
+        # Cap the JS runner's heap below the container limit, so a heavy Code
+        # node fails with a heap error instead of a kernel OOM kill. The
+        # launcher drops N8N_RUNNERS_MAX_OLD_SPACE_SIZE (not in allowed-env
+        # in /etc/n8n-task-runners.json) but passes NODE_OPTIONS.
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size=768"
         - name: N8N_RUNNERS_TASK_BROKER_URI
           value: "http://127.0.0.1:5679"
         - name: N8N_RUNNERS_AUTH_TOKEN
